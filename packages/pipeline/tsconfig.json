@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    { "path": "../shared" },
+    { "path": "../cache" },
+    { "path": "../memory" },
+    { "path": "../model-providers" },
+    { "path": "../harness" },
+    { "path": "../hitl" },
+    { "path": "../telemetry" },
+    { "path": "../tools" }
+  ]
+}

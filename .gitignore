@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build and framework output
+dist/
+.next/
+.turbo/
+build/
+out/
+coverage/
+*.tsbuildinfo
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# Local agent/runtime state
+.claude/
+.slad-os/
+.slad-session
+.antigravitycli/
+
+# OS/editor noise
+.DS_Store
+*.log
+
+# docs
+docs/
+
+# wiki
+wiki/

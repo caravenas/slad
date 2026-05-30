@@ -1,0 +1,19 @@
+{
+  "name": "slad",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "pnpm dev:ui",
+    "dev:cli": "pnpm --filter @slad/cli dev",
+    "dev:ui": "pnpm --filter @slad/ui dev",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean",
+    "lint": "turbo run lint"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.6.0"
+  }
+}

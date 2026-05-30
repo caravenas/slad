@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "composite": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    { "path": "../shared" },
+    { "path": "../cache" },
+    { "path": "../audit-log" },
+    { "path": "../context-budget" },
+    { "path": "../model-providers" },
+    { "path": "../hitl" },
+    { "path": "../harness" },
+    { "path": "../tools" },
+    { "path": "../pipeline" },
+    { "path": "../agent" }
+  ]
+}

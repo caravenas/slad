@@ -1,0 +1,37 @@
+{
+  "name": "@slad/pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "rm -rf dist tsconfig.tsbuildinfo && tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "node --import tsx/esm --test 'src/**/*.test.ts'"
+  },
+  "dependencies": {
+    "@slad/cache": "workspace:*",
+    "@slad/context-budget": "workspace:*",
+    "@slad/harness": "workspace:*",
+    "@slad/hitl": "workspace:*",
+    "@slad/memory": "workspace:*",
+    "@slad/model-providers": "workspace:*",
+    "@slad/shared": "workspace:*",
+    "@slad/telemetry": "workspace:*",
+    "@slad/tools": "workspace:*",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
