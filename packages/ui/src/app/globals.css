@@ -1300,6 +1300,7 @@ button { font-family: inherit; }
   border-radius: 14px;
   display: flex;
   flex-direction: column;
+  position: relative;
   box-shadow: 0 8px 24px rgba(0,0,0,0.3);
   transition: border-color 0.2s;
   max-width: 800px;
@@ -1394,6 +1395,92 @@ button { font-family: inherit; }
 .composer-submit svg {
   width: 16px;
   height: 16px;
+}
+.slash-palette {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% + 8px);
+  z-index: 130;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-2);
+  box-shadow: 0 14px 36px rgba(0,0,0,0.4);
+}
+.slash-option {
+  width: 100%;
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-1);
+  text-align: left;
+  cursor: default;
+}
+.slash-option[data-active="true"] {
+  background: var(--bg-3);
+  border-color: var(--border-strong);
+}
+.slash-option[data-disabled="true"] {
+  color: var(--fg-3);
+}
+.slash-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.slash-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--fg-0);
+}
+.slash-desc {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--fg-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.slash-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  color: var(--fg-4);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.slash-meta span {
+  border: 1px solid var(--border-1);
+  border-radius: 4px;
+  padding: 2px 5px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.slash-empty,
+.slash-message {
+  padding: 9px 10px;
+  color: var(--fg-3);
+  font-size: 12px;
+}
+.slash-message {
+  border-top: 1px solid var(--border-1);
+  margin-top: 4px;
+  color: var(--fg-2);
 }
 
 /* ───────── Telemetry view ───────── */

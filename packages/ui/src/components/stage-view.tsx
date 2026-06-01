@@ -2,13 +2,41 @@
 "use client";
 import React, { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { STAGE_NAMES } from '@slad/shared';
+import { executeUiSlashCommand, getUiSlashCommandItems } from '../lib/slash-commands';
 import { StageDots, Chip, Tag, Breadcrumb, JsonTree, ProviderChip, HarnessSeg, STAGE_GLYPHS, fmtUsd, fmtTokens } from './components';
 
 // SLAD OS — Stage view (center panel)
 
 
 
-export function StageView({ sess, detail: detailProp, logs = [], job, nextStage, onRunStage, onCancelJob, onStagePick, onSubmitHitl, onEvolveApply, cliProfiles = [], selectedProfile, onProfileChange, onCreateSession, onRunMode }) {
+export function StageView({ sess, detail: detailProp, logs = [], job, nextStage, onRunStage, onCancelJob, onStagePick, onSubmitHitl, onEvolveApply, cliProfiles = [], selectedProfile, onProfileChange, onCreateSession, onRunMode, onNewSession, onShowStats, slashCommandContext = {} }) {
+  const stageIdx = sess?.activeStage ?? 0;
+  const stageName = STAGE_NAMES[stageIdx];
+  const detail = sess ? detailProp || {} : {};
+  const slashHandlers = useMemo(() => ({
+    ask: () => ({ ok: true, status: "info", message: "Ask necesita una intencion. Crea una nueva sesion para usarlo desde el composer inicial." }),
+    chat: () => ({ ok: true, status: "info", message: "El composer ya esta activo." }),
+    auto: () => ({ ok: true, status: "info", message: "Auto necesita una intencion nueva. Usa New session para iniciarlo." }),
+    "work-debate": () => ({ ok: true, status: "info", message: "Debate necesita una intencion nueva. Usa New session para iniciarlo." }),
+    explore: () => onRunStage?.("explore"),
+    snapshot: () => onRunStage?.("snapshot"),
+    plan: () => onRunStage?.("plan"),
+    run: () => onRunStage?.("run"),
+    learn: () => onRunStage?.("learn"),
+    evolve: () => onRunStage?.("evolve"),
+    status: () => ({ ok: true, status: "info", message: sess ? `${sess.id}: etapa activa ${stageName}.` : "No hay sesion activa." }),
+    new: () => onNewSession?.(),
+    stats: () => onShowStats?.(),
+    version: () => ({ ok: true, status: "info", message: "SLAD UI usa el catalogo compartido de @slad/shared." }),
+    help: () => ({ ok: true, status: "info", message: "Filtra comandos escribiendo / seguido de id, titulo, alias o categoria." }),
+    exit: () => ({ ok: true, status: "info", message: "Palette cerrada." }),
+  }), [onRunStage, onNewSession, onShowStats, sess?.id, stageName]);
+  const activeSlashCommandContext = useMemo(() => ({
+    ...slashCommandContext,
+    activeSessionId: sess?.id ?? null,
+    hasPlan: Boolean(detail.plan?.tasks?.length),
+  }), [slashCommandContext, sess?.id, detail.plan?.tasks?.length]);
+
   if (!sess) {
     // ask mode — no session, but job may be running/done
     if (job && (job.stage === "ask" || logs.length > 0)) {
@@ -39,12 +67,10 @@ export function StageView({ sess, detail: detailProp, logs = [], job, nextStage,
         cliProfiles={cliProfiles}
         selectedProfile={selectedProfile}
         onProfileChange={onProfileChange}
+        slashCommandContext={slashCommandContext}
       />
     );
   }
-  const stageIdx = sess.activeStage;
-  const stageName = STAGE_NAMES[stageIdx];
-  const detail = detailProp || {};
   const hitlQuestions = detail.questionsByStage?.[stageName] || (stageIdx === 3 ? detail.questions || [] : []);
   const isAwaitingHuman = sess.stages[stageIdx] === "await" && hitlQuestions.length > 0;
   return (
@@ -89,6 +115,8 @@ export function StageView({ sess, detail: detailProp, logs = [], job, nextStage,
               stageIdx === 1 ? "Ajustar Snapshot o continuar..." :
               "Modificar el Plan antes de ejecución..."
             }
+            slashCommandContext={activeSlashCommandContext}
+            slashCommandHandlers={slashHandlers}
           />
         )}
       </div>
@@ -284,14 +312,50 @@ const MODE_META = {
   },
 };
 
-export function EmptyState({ onCreateSession, onRunMode, cliProfiles = [], selectedProfile, onProfileChange }) {
+export function EmptyState({ onCreateSession, onRunMode, cliProfiles = [], selectedProfile, onProfileChange, slashCommandContext = {} }) {
   const [intent, setIntent] = useState("");
   const [mode, setMode] = useState("work");
   const [debateProfileId, setDebateProfileId] = useState("");
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashActive, setSlashActive] = useState(0);
+  const [slashMessage, setSlashMessage] = useState("");
+  const intentRef = useRef(null);
   const meta = MODE_META[mode] || MODE_META.work;
   const canSubmit = intent.trim().length >= 3;
   const hasProfiles = cliProfiles.length > 0;
   const isDebate = mode === "work-debate";
+  const emptySlashContext = useMemo(() => ({
+    ...slashCommandContext,
+    activeSessionId: null,
+    hasPlan: false,
+  }), [slashCommandContext]);
+  const slashQuery = intent.startsWith("/") ? intent.slice(1) : "";
+  const slashItems = useMemo(
+    () => (slashOpen || intent.startsWith("/") ? getUiSlashCommandItems(slashQuery, emptySlashContext) : []),
+    [slashOpen, intent, slashQuery, emptySlashContext],
+  );
+  const slashHandlers = useMemo(() => ({
+    ask: () => { setMode("ask"); return { ok: true, status: "info", message: "Modo Ask seleccionado. Escribe la intencion y envia." }; },
+    chat: () => { setMode("ask"); return { ok: true, status: "info", message: "Modo conversacional usa Ask desde este composer." }; },
+    auto: () => { setMode("work"); return { ok: true, status: "info", message: "Modo Work seleccionado. Escribe la intencion y envia." }; },
+    "work-debate": () => { setMode("work-debate"); return { ok: true, status: "info", message: "Modo Debate seleccionado. Escribe la intencion y envia." }; },
+    help: () => ({ ok: true, status: "info", message: "Filtra comandos escribiendo / seguido de id, titulo, alias o categoria." }),
+    exit: () => ({ ok: true, status: "info", message: "Palette cerrada." }),
+    new: () => ({ ok: true, status: "info", message: "Ya estas en el composer para crear una sesion nueva." }),
+    version: () => ({ ok: true, status: "info", message: "SLAD UI usa el catalogo compartido de @slad/shared." }),
+    status: () => ({ ok: false, status: "not-executable", message: "Status requiere una sesion activa." }),
+    stats: () => ({ ok: true, status: "info", message: "Abre una sesion o usa el panel lateral para ver stats." }),
+    explore: () => ({ ok: false, status: "not-executable", message: "Explore requiere crear una sesion primero." }),
+    snapshot: () => ({ ok: false, status: "not-executable", message: "Snapshot requiere una sesion activa." }),
+    plan: () => ({ ok: false, status: "not-executable", message: "Plan requiere una sesion activa." }),
+    run: () => ({ ok: false, status: "not-executable", message: "Run requiere una sesion activa con plan." }),
+    learn: () => ({ ok: false, status: "not-executable", message: "Learn requiere una sesion activa." }),
+    evolve: () => ({ ok: false, status: "not-executable", message: "Evolve requiere una sesion activa." }),
+  }), []);
+
+  useEffect(() => {
+    if (slashActive >= slashItems.length) setSlashActive(Math.max(0, slashItems.length - 1));
+  }, [slashActive, slashItems.length]);
 
   // Debate second profile must share the same agent/provider as primary — cross-provider debate is not supported.
   const primaryAgent = cliProfiles.find(p => p.value === selectedProfile)?.agent ?? null;
@@ -307,6 +371,20 @@ export function EmptyState({ onCreateSession, onRunMode, cliProfiles = [], selec
       onCreateSession?.(q, m, opts);
     }
     setIntent("");
+  };
+
+  const selectSlashCommand = async (item = slashItems[slashActive]) => {
+    if (!item) return;
+    if (!item.availability.executable) {
+      setSlashMessage(item.availability.reason || "Comando no ejecutable en este contexto.");
+      return;
+    }
+    const result = await executeUiSlashCommand(item.command, slashHandlers);
+    setSlashMessage(result.message || (result.ok ? `${item.command.title} ejecutado.` : "No se pudo ejecutar el comando."));
+    setSlashOpen(false);
+    setSlashActive(0);
+    setIntent("");
+    requestAnimationFrame(() => intentRef.current?.focus());
   };
 
   return (
@@ -347,11 +425,55 @@ export function EmptyState({ onCreateSession, onRunMode, cliProfiles = [], selec
             placeholder={meta.placeholder}
             className="composer-input"
             rows={2}
+            ref={intentRef}
             value={intent}
-            onChange={(e) => setIntent(e.target.value)}
+            aria-expanded={slashOpen || intent.startsWith("/")}
+            aria-controls="empty-slash-command-palette"
+            aria-activedescendant={(slashOpen || intent.startsWith("/")) && slashItems[slashActive] ? `empty-slash-command-${slashItems[slashActive].command.id}` : undefined}
+            onChange={(e) => {
+              const nextValue = e.target.value;
+              setIntent(nextValue);
+              if (nextValue.startsWith("/")) setSlashOpen(true);
+              if (!nextValue.startsWith("/")) setSlashOpen(false);
+            }}
             onKeyDown={(e) => {
+              if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+                setSlashOpen(true);
+              }
+              if (slashOpen || intent.startsWith("/")) {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setSlashOpen(false);
+                  return;
+                }
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setSlashActive((idx) => Math.min(idx + 1, Math.max(0, slashItems.length - 1)));
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setSlashActive((idx) => Math.max(0, idx - 1));
+                  return;
+                }
+                if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) {
+                  e.preventDefault();
+                  selectSlashCommand();
+                  return;
+                }
+              }
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submit();
             }}
+          />
+          <SlashCommandPalette
+            id="empty-slash-command-palette"
+            optionIdPrefix="empty-slash-command"
+            open={slashOpen || intent.startsWith("/")}
+            items={slashItems}
+            activeIndex={slashActive}
+            message={slashMessage}
+            onHover={setSlashActive}
+            onSelect={selectSlashCommand}
           />
           <div className="composer-footer" style={{ justifyContent: "flex-end" }}>
             {hasProfiles && (
@@ -994,11 +1116,138 @@ export function EvolveStage({ sess, detail, onApply }) {
 
 /* ───────── Composer ───────── */
 
-export function Composer({ placeholder }) {
+function SlashCommandPalette({ id, optionIdPrefix, open, items, activeIndex, message, onHover, onSelect }) {
+  if (!open) return null;
+  return (
+    <div className="slash-palette" role="listbox" id={id} aria-label="Slash commands">
+      {items.length === 0 && (
+        <div className="slash-empty" role="option" aria-disabled="true">
+          Sin comandos para ese filtro.
+        </div>
+      )}
+      {items.map((item, index) => {
+        const active = index === activeIndex;
+        const disabled = !item.availability.executable;
+        const hasArgs = item.command.args.length > 0;
+        return (
+          <button
+            key={item.command.id}
+            id={`${optionIdPrefix}-${item.command.id}`}
+            className="slash-option"
+            data-active={active ? "true" : "false"}
+            data-disabled={disabled ? "true" : "false"}
+            role="option"
+            aria-selected={active}
+            aria-disabled={disabled}
+            type="button"
+            onMouseEnter={() => onHover(index)}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onSelect(item);
+            }}
+          >
+            <span className="slash-main">
+              <span className="slash-title">/{item.command.id}</span>
+              <span className="slash-desc">{item.command.title} · {item.command.description}</span>
+            </span>
+            <span className="slash-meta">
+              <span>{item.command.category}</span>
+              <span>{hasArgs ? `${item.command.args.length} args` : "sin args"}</span>
+              {disabled && <span>{item.availability.reason}</span>}
+            </span>
+          </button>
+        );
+      })}
+      {message && <div className="slash-message" role="status">{message}</div>}
+    </div>
+  );
+}
+
+export function Composer({ placeholder, slashCommandContext = {}, slashCommandHandlers = {} }) {
+  const [value, setValue] = useState("");
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashActive, setSlashActive] = useState(0);
+  const [slashMessage, setSlashMessage] = useState("");
+  const inputRef = useRef(null);
+  const slashQuery = value.startsWith("/") ? value.slice(1) : "";
+  const slashItems = useMemo(
+    () => (slashOpen || value.startsWith("/") ? getUiSlashCommandItems(slashQuery, slashCommandContext) : []),
+    [slashOpen, value, slashQuery, slashCommandContext],
+  );
+
+  useEffect(() => {
+    if (slashActive >= slashItems.length) setSlashActive(Math.max(0, slashItems.length - 1));
+  }, [slashActive, slashItems.length]);
+
+  const selectSlashCommand = async (item = slashItems[slashActive]) => {
+    if (!item) return;
+    if (!item.availability.executable) {
+      setSlashMessage(item.availability.reason || "Comando no ejecutable en este contexto.");
+      return;
+    }
+    const result = await executeUiSlashCommand(item.command, slashCommandHandlers);
+    setSlashMessage(result.message || (result.ok ? `${item.command.title} ejecutado.` : "No se pudo ejecutar el comando."));
+    setSlashOpen(false);
+    setSlashActive(0);
+    setValue("");
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
   return (
     <div className="composer-wrapper">
       <div className="composer">
-        <textarea placeholder={placeholder} className="composer-input" rows={1}></textarea>
+        <textarea
+          placeholder={placeholder}
+          className="composer-input"
+          rows={1}
+          ref={inputRef}
+          value={value}
+          aria-expanded={slashOpen || value.startsWith("/")}
+          aria-controls="stage-slash-command-palette"
+          aria-activedescendant={(slashOpen || value.startsWith("/")) && slashItems[slashActive] ? `stage-slash-command-${slashItems[slashActive].command.id}` : undefined}
+          onChange={(e) => {
+            const nextValue = e.target.value;
+            setValue(nextValue);
+            if (nextValue.startsWith("/")) setSlashOpen(true);
+            if (!nextValue.startsWith("/")) setSlashOpen(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+              setSlashOpen(true);
+            }
+            if (slashOpen || value.startsWith("/")) {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setSlashOpen(false);
+                return;
+              }
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setSlashActive((idx) => Math.min(idx + 1, Math.max(0, slashItems.length - 1)));
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setSlashActive((idx) => Math.max(0, idx - 1));
+                return;
+              }
+              if (e.key === "Enter") {
+                e.preventDefault();
+                selectSlashCommand();
+              }
+            }
+          }}
+        ></textarea>
+        <SlashCommandPalette
+          id="stage-slash-command-palette"
+          optionIdPrefix="stage-slash-command"
+          open={slashOpen || value.startsWith("/")}
+          items={slashItems}
+          activeIndex={slashActive}
+          message={slashMessage}
+          onHover={setSlashActive}
+          onSelect={selectSlashCommand}
+        />
         <div className="composer-footer">
           <div className="composer-tools">
             <button className="composer-tool active"><span className="ic">🤖</span> Gemini 3.1 Pro (High) <span style={{ opacity: 0.5 }}>⌄</span></button>

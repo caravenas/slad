@@ -187,6 +187,407 @@ export const RoutingDecision = z.object({
 });
 export type RoutingDecision = z.infer<typeof RoutingDecision>;
 
+export const SlashCommandSurface = z.enum(["cli", "ui"]);
+export type SlashCommandSurface = z.infer<typeof SlashCommandSurface>;
+
+export const SlashCommandCategory = z.enum(["chat", "pipeline", "session", "meta", "observability"]);
+export type SlashCommandCategory = z.infer<typeof SlashCommandCategory>;
+
+export const SlashCommandArgType = z.enum(["string", "enum", "boolean", "path", "project", "confirm"]);
+export type SlashCommandArgType = z.infer<typeof SlashCommandArgType>;
+
+export const SlashCommandExecutionKind = z.enum(["session-message", "local-action", "dual"]);
+export type SlashCommandExecutionKind = z.infer<typeof SlashCommandExecutionKind>;
+
+const SlashCommandId = z.string().regex(/^[a-z][a-z0-9.-]*$/);
+const SlashCommandAlias = z.string().min(1).regex(/^[^\s/]+$/);
+const SlashCommandArgName = z.string().regex(/^[a-z][a-zA-Z0-9]*$/);
+const SlashCommandMetadataValue = z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]);
+
+export const SlashCommandArgumentMetadata = z.object({
+  name: SlashCommandArgName,
+  placeholder: z.string().min(1).optional(),
+  optional: z.boolean().default(false),
+  help: z.string().min(1).optional(),
+});
+export type SlashCommandArgumentMetadata = z.infer<typeof SlashCommandArgumentMetadata>;
+
+export const SlashCommandDiscoveryMetadata = z.object({
+  name: SlashCommandId,
+  description: z.string().min(1),
+  arguments: z.array(SlashCommandArgumentMetadata).default([]),
+});
+export type SlashCommandDiscoveryMetadata = z.infer<typeof SlashCommandDiscoveryMetadata>;
+
+const BaseSlashCommandArg = z.object({
+  type: SlashCommandArgType,
+  name: SlashCommandArgName,
+  label: z.string().min(1),
+  description: z.string().min(1),
+  required: z.boolean().default(false),
+  placeholder: z.string().optional(),
+  metadata: z.record(SlashCommandMetadataValue).default({}),
+});
+
+export const SlashCommandStringArg = BaseSlashCommandArg.extend({
+  type: z.literal("string"),
+  minLength: z.number().int().nonnegative().optional(),
+  maxLength: z.number().int().positive().optional(),
+  pattern: z.string().optional(),
+  multiline: z.boolean().default(false),
+});
+export type SlashCommandStringArg = z.infer<typeof SlashCommandStringArg>;
+
+export const SlashCommandEnumArg = BaseSlashCommandArg.extend({
+  type: z.literal("enum"),
+  options: z
+    .array(
+      z.object({
+        value: z.string().min(1),
+        label: z.string().min(1),
+        description: z.string().optional(),
+      }),
+    )
+    .min(1),
+});
+export type SlashCommandEnumArg = z.infer<typeof SlashCommandEnumArg>;
+
+export const SlashCommandBooleanArg = BaseSlashCommandArg.extend({
+  type: z.literal("boolean"),
+  defaultValue: z.boolean().optional(),
+});
+export type SlashCommandBooleanArg = z.infer<typeof SlashCommandBooleanArg>;
+
+export const SlashCommandPathArg = BaseSlashCommandArg.extend({
+  type: z.literal("path"),
+  allowFiles: z.boolean().default(true),
+  allowDirectories: z.boolean().default(true),
+  extensions: z.array(z.string().min(1)).default([]),
+});
+export type SlashCommandPathArg = z.infer<typeof SlashCommandPathArg>;
+
+export const SlashCommandProjectArg = BaseSlashCommandArg.extend({
+  type: z.literal("project"),
+  allowCurrentWorkspace: z.boolean().default(true),
+});
+export type SlashCommandProjectArg = z.infer<typeof SlashCommandProjectArg>;
+
+export const SlashCommandConfirmArg = BaseSlashCommandArg.extend({
+  type: z.literal("confirm"),
+  confirmLabel: z.string().min(1).optional(),
+  defaultValue: z.boolean().optional(),
+  destructive: z.boolean().default(false),
+});
+export type SlashCommandConfirmArg = z.infer<typeof SlashCommandConfirmArg>;
+
+export const SlashCommandArg = z.discriminatedUnion("type", [
+  SlashCommandStringArg,
+  SlashCommandEnumArg,
+  SlashCommandBooleanArg,
+  SlashCommandPathArg,
+  SlashCommandProjectArg,
+  SlashCommandConfirmArg,
+]);
+export type SlashCommandArg = z.infer<typeof SlashCommandArg>;
+
+export const SlashCommandExecutionIntent = z.object({
+  kind: SlashCommandExecutionKind.default("dual"),
+  emitsSessionMessage: z.boolean().default(true),
+  invokesLocalAction: z.boolean().default(true),
+  localAction: z.string().min(1).optional(),
+  messageTemplate: z.string().min(1).optional(),
+}).superRefine((intent, ctx) => {
+  if ((intent.kind === "local-action" || intent.kind === "dual") && !intent.localAction) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "localAction is required for local-action and dual execution intents",
+      path: ["localAction"],
+    });
+  }
+});
+export type SlashCommandExecutionIntent = z.infer<typeof SlashCommandExecutionIntent>;
+
+export const SlashCommandVisibility = z.object({
+  hidden: z.boolean().default(false),
+  experimental: z.boolean().default(false),
+  enabledByDefault: z.boolean().default(true),
+});
+export type SlashCommandVisibility = z.infer<typeof SlashCommandVisibility>;
+
+export const SlashCommandPermission = z.object({
+  permissions: z.array(Permission).default([]),
+  risk: ToolRisk.default("low"),
+});
+export type SlashCommandPermission = z.infer<typeof SlashCommandPermission>;
+
+export const SlashCommandConfig = z.object({
+  requiresActiveSession: z.boolean().default(false),
+  requiresWorkspaceTrust: z.boolean().default(false),
+  requiresProvider: z.boolean().default(false),
+  requiresPlan: z.boolean().default(false),
+});
+export type SlashCommandConfig = z.infer<typeof SlashCommandConfig>;
+
+export const SlashCommandMetadata = z.object({
+  cliCommand: z.string().min(1).optional(),
+  uiHandler: z.string().min(1).optional(),
+  pipelineStage: PipelineStageName.optional(),
+  keywords: z.array(z.string().min(1)).default([]),
+  source: z.string().min(1).optional(),
+});
+export type SlashCommandMetadata = z.infer<typeof SlashCommandMetadata>;
+
+export const SlashCommand = z.object({
+  id: SlashCommandId,
+  title: z.string().min(1),
+  description: z.string().min(1),
+  category: SlashCommandCategory,
+  surfaces: z.array(SlashCommandSurface).min(1),
+  args: z.array(SlashCommandArg).default([]),
+  executionIntent: SlashCommandExecutionIntent,
+  aliases: z.array(SlashCommandAlias).default([]),
+  visibility: SlashCommandVisibility.default({}),
+  permission: SlashCommandPermission.default({}),
+  config: SlashCommandConfig.default({}),
+  metadata: SlashCommandMetadata.default({}),
+});
+export type SlashCommand = z.infer<typeof SlashCommand>;
+
+export function toSlashCommandDiscoveryMetadata(command: SlashCommand): SlashCommandDiscoveryMetadata {
+  return SlashCommandDiscoveryMetadata.parse({
+    name: command.id,
+    description: command.description,
+    arguments: command.args.map((arg) => ({
+      name: arg.name,
+      placeholder: arg.placeholder ?? arg.name,
+      optional: !arg.required,
+      help: arg.description,
+    })),
+  });
+}
+
+function renderSlashCommandArgumentSignature(argument: SlashCommandArgumentMetadata): string {
+  const placeholder = argument.placeholder ?? argument.name;
+  return argument.optional ? `[${placeholder}]` : `<${placeholder}>`;
+}
+
+export function renderSlashCommandSignature(command: SlashCommand | SlashCommandDiscoveryMetadata): string {
+  const metadata =
+    "arguments" in command ? SlashCommandDiscoveryMetadata.parse(command) : toSlashCommandDiscoveryMetadata(command);
+  const renderedArgs = metadata.arguments.map(renderSlashCommandArgumentSignature);
+  return renderedArgs.length > 0 ? `/${metadata.name} ${renderedArgs.join(" ")}` : `/${metadata.name}`;
+}
+
+export const SlashCommandCatalog = z.array(SlashCommand);
+export type SlashCommandCatalog = z.infer<typeof SlashCommandCatalog>;
+
+const SHARED_SURFACES: SlashCommandSurface[] = ["cli", "ui"];
+const DUAL_MESSAGE_AND_ACTION = {
+  kind: "dual",
+  emitsSessionMessage: true,
+  invokesLocalAction: true,
+} as const;
+
+export const SLASH_COMMAND_CATALOG = SlashCommandCatalog.parse([
+  {
+    id: "ask",
+    title: "Ask",
+    description: "Respuesta directa del modelo sin ejecutar el pipeline.",
+    category: "chat",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "chat.ask" },
+    aliases: ["question", "preguntar"],
+    config: { requiresProvider: true },
+    metadata: { cliCommand: "ask", uiHandler: "startModeJob:ask", keywords: ["chat", "quick-answer"] },
+  },
+  {
+    id: "chat",
+    title: "Chat",
+    description: "Abrir o continuar el modo conversacional.",
+    category: "chat",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "chat.open" },
+    aliases: ["repl", "conversacion"],
+    config: { requiresProvider: true },
+    metadata: { cliCommand: "chat", uiHandler: "composer.focus", keywords: ["conversation"] },
+  },
+  {
+    id: "auto",
+    title: "Auto",
+    description: "Ejecutar el pipeline completo: explore, snapshot, plan, run y learn.",
+    category: "pipeline",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "pipeline.work" },
+    aliases: ["work", "pipeline"],
+    permission: { permissions: ["workspace:read", "workspace:write", "process:exec", "model:generate"], risk: "high" },
+    config: { requiresWorkspaceTrust: true, requiresProvider: true },
+    metadata: { cliCommand: "auto", uiHandler: "startModeJob:work", keywords: ["full-pipeline"] },
+  },
+  {
+    id: "work-debate",
+    title: "Work Debate",
+    description: "Ejecutar el pipeline completo con debate entre modelos en explore y plan.",
+    category: "pipeline",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "pipeline.work-debate" },
+    aliases: ["debate", "auto-debate"],
+    permission: { permissions: ["workspace:read", "workspace:write", "process:exec", "model:generate"], risk: "high" },
+    config: { requiresWorkspaceTrust: true, requiresProvider: true },
+    metadata: { cliCommand: "work --debate", uiHandler: "startModeJob:work-debate", keywords: ["full-pipeline", "arbiter"] },
+  },
+  {
+    id: "explore",
+    title: "Explore",
+    description: "Analizar una intención y devolver enfoques, riesgos y próximos pasos.",
+    category: "pipeline",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "pipeline.stage.explore" },
+    aliases: ["explorar"],
+    permission: { permissions: ["workspace:read", "model:generate"], risk: "medium" },
+    config: { requiresProvider: true },
+    metadata: { cliCommand: "explore", uiHandler: "runStage:explore", pipelineStage: "explore", keywords: ["intent"] },
+  },
+  {
+    id: "snapshot",
+    title: "Snapshot",
+    description: "Generar el mini-spec a partir del último explore o de una intención.",
+    category: "pipeline",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "pipeline.stage.snapshot" },
+    permission: { permissions: ["workspace:read", "workspace:write", "model:generate"], risk: "medium" },
+    config: { requiresActiveSession: true, requiresProvider: true },
+    metadata: { cliCommand: "snapshot", uiHandler: "runStage:snapshot", pipelineStage: "snapshot", keywords: ["spec"] },
+  },
+  {
+    id: "plan",
+    title: "Plan",
+    description: "Convertir un snapshot en un plan de tareas ejecutable.",
+    category: "pipeline",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "pipeline.stage.plan" },
+    aliases: ["planificar"],
+    permission: { permissions: ["workspace:read", "workspace:write", "model:generate"], risk: "medium" },
+    config: { requiresActiveSession: true, requiresProvider: true },
+    metadata: { cliCommand: "plan", uiHandler: "runStage:plan", pipelineStage: "plan", keywords: ["tasks"] },
+  },
+  {
+    id: "run",
+    title: "Run",
+    description: "Ejecutar la siguiente tarea del plan o el DAG completo.",
+    category: "pipeline",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "pipeline.stage.run" },
+    aliases: ["ejecutar"],
+    permission: { permissions: ["workspace:read", "workspace:write", "process:exec"], risk: "high" },
+    config: { requiresActiveSession: true, requiresWorkspaceTrust: true, requiresPlan: true },
+    metadata: { cliCommand: "run", uiHandler: "runStage:run", pipelineStage: "run", keywords: ["builder", "reviewer"] },
+  },
+  {
+    id: "learn",
+    title: "Learn",
+    description: "Capturar decisiones, errores y patrones desde el último run.",
+    category: "pipeline",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "pipeline.stage.learn" },
+    aliases: ["aprender"],
+    permission: { permissions: ["workspace:read", "workspace:write", "model:generate"], risk: "medium" },
+    config: { requiresActiveSession: true, requiresProvider: true },
+    metadata: { cliCommand: "learn", uiHandler: "runStage:learn", pipelineStage: "learn", keywords: ["retrospective"] },
+  },
+  {
+    id: "evolve",
+    title: "Evolve",
+    description: "Proponer actualizaciones de wiki y patrones desde artefactos recientes.",
+    category: "pipeline",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "pipeline.stage.evolve" },
+    aliases: ["evolucionar"],
+    permission: { permissions: ["workspace:read", "workspace:write", "model:generate"], risk: "medium" },
+    config: { requiresActiveSession: true, requiresProvider: true },
+    metadata: { cliCommand: "evolve", uiHandler: "runStage:evolve", pipelineStage: "evolve", keywords: ["wiki", "patterns"] },
+  },
+  {
+    id: "status",
+    title: "Status",
+    description: "Ver el estado de la sesión activa y sus artefactos.",
+    category: "session",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "session.status" },
+    aliases: ["estado", "show", "sesion", "sesión"],
+    config: { requiresActiveSession: true },
+    metadata: { cliCommand: "session show", uiHandler: "session.show", keywords: ["state"] },
+  },
+  {
+    id: "new",
+    title: "New Session",
+    description: "Crear una nueva sesión de trabajo sin ejecutar etapas.",
+    category: "session",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "session.start" },
+    aliases: ["session.start", "nuevo", "nueva", "reset"],
+    permission: { permissions: ["workspace:write"], risk: "medium" },
+    metadata: { cliCommand: "session start", uiHandler: "session.create", keywords: ["intent"] },
+  },
+  {
+    id: "stats",
+    title: "Stats",
+    description: "Mostrar totales de sesiones, runs y aprendizajes del proyecto.",
+    category: "observability",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "stats.show" },
+    aliases: ["metrics", "telemetry"],
+    permission: { permissions: ["workspace:read"], risk: "low" },
+    metadata: { cliCommand: "stats", uiHandler: "stats.show", keywords: ["runs", "learnings"] },
+  },
+  {
+    id: "version",
+    title: "Version",
+    description: "Mostrar la versión instalada de SLAD OS.",
+    category: "meta",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "version.show" },
+    aliases: ["about"],
+    metadata: { cliCommand: "version", uiHandler: "version.show", keywords: ["about"] },
+  },
+  {
+    id: "help",
+    title: "Help",
+    description: "Mostrar la ayuda de comandos disponibles.",
+    category: "meta",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "help.show" },
+    aliases: ["ayuda", "?", "h"],
+    metadata: { cliCommand: "chat:/help", uiHandler: "commandPalette.help", keywords: ["commands"] },
+  },
+  {
+    id: "exit",
+    title: "Exit",
+    description: "Salir del modo conversacional o cerrar la paleta de comandos.",
+    category: "meta",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "chat.exit" },
+    aliases: ["quit", "salir", "bye", "chau", "q"],
+    metadata: { cliCommand: "chat:/exit", uiHandler: "commandPalette.close", keywords: ["close"] },
+  },
+]);
+export type SlashCommandId = (typeof SLASH_COMMAND_CATALOG)[number]["id"];
+
 export const AgentRunLog = z.object({
   sessionId: z.string(),
   intent: z.string(),

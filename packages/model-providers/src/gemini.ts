@@ -40,6 +40,19 @@ export class GeminiProvider implements ModelProvider {
         parts: [{ text: m.content }],
       }));
 
+    if (opts.onChunk) {
+      const streamResult = await model.generateContentStream({ contents });
+      let fullText = "";
+      for await (const chunk of streamResult.stream) {
+        const text = chunk.text();
+        if (text) {
+          opts.onChunk(text);
+          fullText += text;
+        }
+      }
+      return fullText.trim();
+    }
+
     const timeoutMs = resolveApiTimeoutMs();
     return await retryWithBackoff(async () => {
       try {
@@ -66,5 +79,35 @@ export class GeminiProvider implements ModelProvider {
         log.debug(`gemini: reintento ${attempt}/3 en ${delayMs}ms`);
       },
     });
+  }
+
+  async *stream(messages: ChatMessage[], opts: CompletionOptions = {}): AsyncGenerator<string> {
+    const systemFromMessages = messages
+      .filter((m) => m.role === "system")
+      .map((m) => m.content)
+      .join("\n\n");
+    const systemInstruction = opts.systemPrompt ?? systemFromMessages ?? undefined;
+
+    const model = this.client.getGenerativeModel({
+      model: opts.model ?? DEFAULT_MODEL,
+      ...(systemInstruction ? { systemInstruction } : {}),
+      generationConfig: {
+        temperature: opts.temperature ?? 0.4,
+        maxOutputTokens: opts.maxTokens ?? 4096,
+      },
+    });
+
+    const contents = messages
+      .filter((m) => m.role !== "system")
+      .map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      }));
+
+    const streamResult = await model.generateContentStream({ contents });
+    for await (const chunk of streamResult.stream) {
+      const text = chunk.text();
+      if (text) yield text;
+    }
   }
 }

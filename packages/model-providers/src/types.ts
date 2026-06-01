@@ -8,4 +8,5 @@ export type CompletionOptions = {
   maxTokens?: number;
   systemPrompt?: string;
   onUsage?: (inputTokens: number, outputTokens: number) => void;
+  onChunk?: (text: string) => void;
 };

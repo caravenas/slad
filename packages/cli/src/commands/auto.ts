@@ -127,13 +127,26 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   if (opts.maxCost !== undefined) log.dim(`  budget: $${opts.maxCost}`);
   console.log("");
 
-  const hitl = createHitlTransport("tty");
+  const _hitl = createHitlTransport("tty");
   const harnessConfig = loadHarnessConfig(opts.harness ?? "on");
   const harness = harnessConfig.mode === "off"
     ? undefined
     : await createHarness(harnessConfig);
 
   let spinner = ora("Iniciando pipeline...").start();
+
+  // Pause spinner while HITL prompts are active to avoid visual conflicts
+  const hitl = {
+    ..._hitl,
+    collectAnswers: async (questions: Parameters<typeof _hitl.collectAnswers>[0]) => {
+      const prevText = spinner.text;
+      if (spinner.isSpinning) spinner.stop();
+      const answers = await _hitl.collectAnswers(questions);
+      // Restart spinner with same text so progress continues after HITL
+      spinner = ora(prevText).start();
+      return answers;
+    },
+  };
 
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
@@ -153,6 +166,20 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
     ...(opts.maxCost !== undefined ? { policies: { budget: { maxUsd: opts.maxCost } } } : {}),
   });
 
+  // Inject per-task progress callbacks into pipeline services for the run stage
+  Object.assign(pipeline.services as Record<string, unknown>, {
+    onTaskStart: (taskId: string, title: string) => {
+      const text = kleur.dim(taskId) + " " + title;
+      if (!spinner.isSpinning) spinner = ora(text).start();
+      else spinner.text = text;
+    },
+    onTaskComplete: (taskId: string, status: string) => {
+      const icon = status === "completed" ? kleur.green("✓") : kleur.red("✗");
+      spinner.stopAndPersist({ symbol: icon, text: kleur.dim(taskId) + " " + status });
+      spinner = ora("").start();
+    },
+  });
+
   const agent = createAgent({
     model: provider,
     safety: harness,
@@ -165,7 +192,7 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
     {
       onStageStart: (stage: string) => {
         if (spinner.isSpinning) spinner.stop();
-        spinner = ora(`Ejecutando ${stage}...`).start();
+        spinner = ora(kleur.dim(`${stage}...`)).start();
       },
       onArtifact: async (stage: string, artifact: unknown) => {
         if (stage !== "run") {
@@ -173,14 +200,25 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
         }
       },
       onStageComplete: (stage: string) => {
-        if (spinner.isSpinning) spinner.succeed(`${stage} completado`);
+        // Always persist the completion line, regardless of spinner state
+        if (spinner.isSpinning) {
+          spinner.stopAndPersist({ symbol: kleur.green("✓"), text: kleur.dim(stage) });
+        } else {
+          process.stdout.write(kleur.green("✓") + " " + kleur.dim(stage) + "\n");
+        }
       },
     },
   );
 
-  if (spinner.isSpinning) {
-    if (result.status === "failed") spinner.fail("Pipeline falló");
-    else spinner.succeed("Pipeline completado");
+  if (spinner.isSpinning) spinner.stop();
+  if (result.status === "failed") process.stdout.write(kleur.red("✗") + " Pipeline falló\n");
+  else process.stdout.write(kleur.green("✓") + " Pipeline completado\n");
+
+  if (result.status === "failed") {
+    const failedStage = result.stages.find((s) => s.status === "failed");
+    if (failedStage?.error) {
+      log.error(`Stage '${failedStage.stageId}': ${failedStage.error.message}`);
+    }
   }
 
   const outputs = Object.fromEntries(result.stages.map((s) => [s.stageId, s.output]));

@@ -14,9 +14,6 @@ import type {
 import { isStage } from "./stage.js";
 import { createModelAdapter, createNoopModelAdapter } from "@slad/model-providers";
 import type { ChatMessage, CompletionOptions } from "@slad/model-providers";
-import { NoopTelemetry } from "@slad/telemetry";
-import { ToolRegistry } from "@slad/tools";
-import { BudgetTracker } from "@slad/context-budget";
 
 const noopLogger: PipelineLogger = {
   debug() {},
@@ -40,6 +37,14 @@ export async function runPipeline<Input = unknown, Output = unknown, Services ex
   const stages: Stage<unknown, unknown, Services>[] = options.stages.map((stage) => resolveStage(stage, options));
   const stageResults: StageResult[] = [];
   const artifacts: PipelineArtifact[] = [];
+
+  // Dynamic imports — keeps Turbopack from statically bundling Node.js-only packages
+  // when @slad/pipeline is consumed from the Next.js UI
+  const [{ NoopTelemetry }, { ToolRegistry }, { BudgetTracker }] = await Promise.all([
+    import("@slad/telemetry"),
+    import("@slad/tools"),
+    import("@slad/context-budget"),
+  ]);
 
   // Build shared context helpers
   const budget = options.policies?.budget;

@@ -174,6 +174,19 @@ export default function App() {
   const sess = sessions.find(s => s.id === activeId);
   const nextStage = nextStageFor(sess);
   const running = job?.status === "running";
+  const hasProvider = Boolean(
+    settingsData?.activeProfile ||
+    settingsData?.effective?.providers?.defaultProvider ||
+    selectedAgent ||
+    selectedModel ||
+    cliAgents.length > 0,
+  );
+  const slashCommandContext = {
+    activeSessionId: sess?.id ?? null,
+    hasWorkspaceTrust: Boolean(workspace?.trusted),
+    hasProvider,
+    hasPlan: Boolean(sess && details[sess.id]?.plan?.tasks?.length),
+  };
 
   const handleStagePick = (idx) => {
     if (!sess) return;
@@ -561,6 +574,9 @@ export default function App() {
             onProfileChange={handleProfileChange}
             onCreateSession={handleCreateSession}
             onRunMode={handleRunMode}
+            onNewSession={handleStartNewSession}
+            onShowStats={() => setMode("stats")}
+            slashCommandContext={slashCommandContext}
           />
         </div>
         <PanelDivider onDelta={(dx) => setRightWidth(w => Math.max(200, Math.min(620, w - dx)))} />

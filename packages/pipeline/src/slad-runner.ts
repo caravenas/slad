@@ -33,6 +33,8 @@ export interface SladPipelineOptions {
   onStageStart?: (stage: string) => void;
   onStageComplete?: (stage: string, output: unknown) => void;
   onUsage?: (stage: string, inputTokens: number, outputTokens: number) => void;
+  onTaskStart?: (taskId: string, title: string) => void;
+  onTaskComplete?: (taskId: string, status: string) => void;
 }
 
 export interface SladPipelineResult {
@@ -91,6 +93,8 @@ export async function runSladPipeline(options: SladPipelineOptions): Promise<Sla
     tools: options.tools,
     prompts: options.prompts,
     workspace: options.workspace,
+    onTaskStart: options.onTaskStart,
+    onTaskComplete: options.onTaskComplete,
   };
 
   const result = await runPipeline({

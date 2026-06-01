@@ -16,7 +16,7 @@ export const runStage = defineStage<PlanOutput, RunStageResult, SladServices>({
   cache: { enabled: false },
 
   async run(input, ctx) {
-    const { prompts, promptGuidance, hitl, harness, workspace } = ctx.services;
+    const { prompts, promptGuidance, hitl, harness, workspace, onTaskStart, onTaskComplete } = ctx.services;
     const baseSystem = prompts?.builderReviewer ?? DEFAULT_BUILDER_REVIEWER;
     const system = promptGuidance ? promptGuidance("run", baseSystem) : baseSystem;
 
@@ -62,6 +62,8 @@ export const runStage = defineStage<PlanOutput, RunStageResult, SladServices>({
             break;
           }
         }
+
+        onTaskStart?.(t.id, t.title);
 
         const runUserContent = [
           workspace ? `Workspace context:\n${workspace}` : "",
@@ -119,6 +121,7 @@ export const runStage = defineStage<PlanOutput, RunStageResult, SladServices>({
         }
 
         state.set(t.id, output.status === "completed" ? "done" : "failed");
+        onTaskComplete?.(t.id, output.status);
         results.push(output);
 
         pending = true;

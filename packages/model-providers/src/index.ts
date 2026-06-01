@@ -35,6 +35,7 @@ export interface ToolUseOptions extends CompletionOptions {
 export interface ModelProvider {
   readonly name: ProviderName;
   complete(messages: ChatMessage[], opts?: CompletionOptions): Promise<string>;
+  stream?(messages: ChatMessage[], opts?: CompletionOptions): AsyncGenerator<string>;
   completeWithTools?(messages: ChatMessage[], opts: ToolUseOptions): Promise<ProviderResponse>;
   supportsToolUse?: boolean;
 }

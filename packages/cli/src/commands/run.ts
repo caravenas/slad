@@ -5,12 +5,14 @@ import { runSladPipeline } from "@slad/pipeline";
 import { getApiKey, getModel, loadConfig, resolveProvider } from "../core/config.js";
 import { getSladProvider } from "../core/providers.js";
 import { log } from "../core/logger.js";
-import { writeArtifact } from "../persistence/index.js";
+import { writeArtifact, readArtifact } from "../persistence/index.js";
+import { pathForArtifact } from "../persistence/layout.js";
 import { createHitlTransport } from "@slad/hitl";
 import { createHarness } from "@slad/harness";
 import { loadHarnessConfig } from "../harness/config.js";
 import * as prompts from "../agents/prompts.js";
-import { getActiveSession } from "../core/session.js";
+import { getActiveSession, appendArtifact, saveSession } from "../core/session.js";
+import type { RunOutput } from "../core/types.js";
 import { ProviderError } from "../core/errors.js";
 
 export interface RunOpts {
@@ -34,11 +36,25 @@ export interface RunOpts {
 
 export async function runCommand(opts: RunOpts): Promise<void> {
   const cwd = process.cwd();
-  
-  // To run the `run` stage, we just need the intent and the plan output. 
-  // Normally the pipeline requires `intent`, so let's try to get it from the session.
+
   const session = opts.skipSession ? null : getActiveSession(cwd);
   const intent = session?.intent ?? "continue plan execution";
+
+  // Load the plan artifact from disk — the run stage needs PlanOutput as input
+  let planInput: unknown | undefined;
+  if (session) {
+    try {
+      const planPath = await pathForArtifact("plan", session.id);
+      const result = await readArtifact("plan", planPath);
+      planInput = result.value;
+    } catch {
+      log.error("No se encontró un plan para esta sesión. Ejecuta /plan primero.");
+      return;
+    }
+  } else {
+    log.error("No hay sesión activa. Ejecuta /auto o /explore primero.");
+    return;
+  }
 
   const config = loadConfig();
   const providerName = resolveProvider(opts.provider, opts.agent, config.defaultProvider, config.defaultAgent);
@@ -63,16 +79,27 @@ export async function runCommand(opts: RunOpts): Promise<void> {
   log.title(`Run · ${providerName}${model ? ` · ${model}` : ""}`);
   console.log("");
 
-  const hitl = createHitlTransport("tty", );
+  const _hitl = createHitlTransport("tty");
   const harnessConfig = loadHarnessConfig(opts.harness ?? "on");
-  const harness = harnessConfig.mode === "off" 
-    ? undefined 
+  const harness = harnessConfig.mode === "off"
+    ? undefined
     : await createHarness(harnessConfig);
 
   let spinner = ora("Iniciando ejecución...").start();
 
+  // Pause the spinner while HITL prompts are active to avoid visual conflicts
+  const hitl = {
+    ..._hitl,
+    collectAnswers: async (questions: Parameters<typeof _hitl.collectAnswers>[0]) => {
+      if (spinner.isSpinning) spinner.stop();
+      const answers = await _hitl.collectAnswers(questions);
+      return answers;
+    },
+  };
+
   const result = await runSladPipeline({
     intent,
+    initialInput: planInput,
     provider,
     model,
     stages: ["run"],
@@ -89,13 +116,40 @@ export async function runCommand(opts: RunOpts): Promise<void> {
       spinner = ora(`Ejecutando ${stage}...`).start();
     },
     onArtifact: async (stage, artifact) => {
-      if (stage !== "run") {
-        await writeArtifact(stage as any, artifact as any, { sessionId: session?.id ?? "adhoc" });
+      if (stage === "run") {
+        // run stage emits RunOutput[] — write each task output individually
+        const outputs = Array.isArray(artifact) ? (artifact as RunOutput[]) : [artifact as RunOutput];
+        let currentSession = session;
+        for (const output of outputs) {
+          const ref = await writeArtifact("run", output, { sessionId: currentSession?.id ?? "adhoc" });
+          if (currentSession) {
+            currentSession = appendArtifact(currentSession, "run", ref.path);
+            saveSession(currentSession);
+          }
+        }
+      } else {
+        const ref = await writeArtifact(stage as any, artifact as any, { sessionId: session?.id ?? "adhoc" });
+        if (session) {
+          saveSession(appendArtifact(session, stage as any, ref.path));
+        }
       }
     },
     onStageComplete: (stage) => {
-       if (spinner.isSpinning) spinner.succeed(`${stage} completado`);
-    }
+      if (spinner.isSpinning) spinner.succeed(`${stage} completado`);
+    },
+    onTaskStart: (taskId, title) => {
+      const text = kleur.dim(taskId) + " " + title;
+      if (!spinner.isSpinning) {
+        spinner = ora(text).start();
+      } else {
+        spinner.text = text;
+      }
+    },
+    onTaskComplete: (taskId, status) => {
+      const icon = status === "completed" ? kleur.green("✓") : kleur.red("✗");
+      spinner.stopAndPersist({ symbol: icon, text: kleur.dim(taskId) + " " + status });
+      spinner = ora("").start();
+    },
   });
 
   if (spinner.isSpinning) {

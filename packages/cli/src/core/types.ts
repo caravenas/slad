@@ -25,6 +25,41 @@ export {
 
 export type { CompletionOptions } from "@slad/model-providers";
 
+export {
+  SlashCommand,
+  SlashCommandArgumentMetadata,
+  SlashCommandCatalog,
+  SlashCommandDiscoveryMetadata,
+  SlashCommandSurface,
+  renderSlashCommandSignature,
+  toSlashCommandDiscoveryMetadata,
+} from "@slad/shared";
+export type {
+  SlashCommand as SlashCommandType,
+  SlashCommandArgumentMetadata as SlashCommandArgumentMetadataType,
+  SlashCommandCatalog as SlashCommandCatalogType,
+  SlashCommandDiscoveryMetadata as SlashCommandDiscoveryMetadataType,
+  SlashCommandId,
+  SlashCommandSurface as SlashCommandSurfaceType,
+} from "@slad/shared";
+
+export const CliSlashCommandPayload = z
+  .object({
+    commandId: z.string().min(1),
+    args: z.record(z.never()).default({}),
+  })
+  .strict();
+export type CliSlashCommandPayload = z.infer<typeof CliSlashCommandPayload>;
+
+export type CliSlashCommandHandlerResult<TLocalAction = unknown> = {
+  localAction?: TLocalAction;
+  sessionMessage?: string;
+};
+
+export type CliSlashCommandHandler<TLocalAction = unknown> = (
+  payload: CliSlashCommandPayload,
+) => CliSlashCommandHandlerResult<TLocalAction> | Promise<CliSlashCommandHandlerResult<TLocalAction>>;
+
 export const CliDiscoveryArtifact = z.object({
   candidates: z.array(
     z.object({

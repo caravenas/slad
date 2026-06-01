@@ -29,17 +29,33 @@ export class AnthropicProvider implements ModelProvider {
         content: m.content,
       }));
 
+    const params = {
+      model: opts.model ?? DEFAULT_MODEL,
+      max_tokens: opts.maxTokens ?? 4096,
+      temperature: opts.temperature ?? 0.4,
+      ...(system ? { system } : {}),
+      messages: chat,
+    } as const;
+
+    if (opts.onChunk) {
+      const stream = this.client.messages.stream(params);
+      let fullText = "";
+      for await (const event of stream) {
+        if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+          opts.onChunk(event.delta.text);
+          fullText += event.delta.text;
+        }
+      }
+      const final = await stream.finalMessage();
+      opts.onUsage?.(final.usage.input_tokens, final.usage.output_tokens);
+      return fullText.trim();
+    }
+
     const timeoutMs = resolveApiTimeoutMs();
     const res = await retryWithBackoff(async () => {
       try {
         return await withTimeout(
-          this.client.messages.create({
-            model: opts.model ?? DEFAULT_MODEL,
-            max_tokens: opts.maxTokens ?? 4096,
-            temperature: opts.temperature ?? 0.4,
-            ...(system ? { system } : {}),
-            messages: chat,
-          }),
+          this.client.messages.create(params),
           timeoutMs,
           "anthropic",
         );
@@ -61,10 +77,8 @@ export class AnthropicProvider implements ModelProvider {
       },
     });
 
-    // Report token usage if callback provided
     opts.onUsage?.(res.usage.input_tokens, res.usage.output_tokens);
 
-    // The SDK returns a union of content blocks; we only care about text.
     const text = res.content
       .map((block) => (block.type === "text" ? block.text : ""))
       .join("\n");
@@ -158,6 +172,31 @@ export class AnthropicProvider implements ModelProvider {
       return { type: "tool_use", toolCalls, textParts };
     }
     return { type: "text", content: textParts.join("\n").trim() };
+  }
+
+  async *stream(messages: ChatMessage[], opts: CompletionOptions = {}): AsyncGenerator<string> {
+    const systemFromMessages = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
+    const system = opts.systemPrompt ?? systemFromMessages ?? undefined;
+    const chat = messages
+      .filter((m) => m.role !== "system")
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+
+    const streamResult = this.client.messages.stream({
+      model: opts.model ?? DEFAULT_MODEL,
+      max_tokens: opts.maxTokens ?? 4096,
+      temperature: opts.temperature ?? 0.4,
+      ...(system ? { system } : {}),
+      messages: chat,
+    });
+
+    for await (const event of streamResult) {
+      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+        yield event.delta.text;
+      }
+    }
+
+    const final = await streamResult.finalMessage();
+    opts.onUsage?.(final.usage.input_tokens, final.usage.output_tokens);
   }
 
   get supportsToolUse(): boolean {

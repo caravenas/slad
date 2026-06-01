@@ -295,10 +295,24 @@ sessionCmd
     await sessionShowCommand();
   });
 
-// When slad is invoked with no subcommand, open the interactive chat.
-if (process.argv.length === 2) {
+// When slad is invoked with no subcommand (or only global flags like --agent),
+// open the interactive chat.  We detect this by checking whether argv contains
+// any positional token that matches a known subcommand.
+const knownCommands = new Set(program.commands.map((c) => c.name()));
+const userArgs = process.argv.slice(2);
+const hasSubcommand = userArgs.some((a) => knownCommands.has(a));
+
+if (!hasSubcommand) {
+  // Parse --agent / --provider / --model from argv manually so they work at the root level.
+  const rootChat = new Command("slad")
+    .allowUnknownOption(false)
+    .option("-a, --agent <name>", "Agente local (codex | claude | gemini)")
+    .option("-p, --provider <name>", "Provider LLM: anthropic | openai | gemini | cli")
+    .option("-m, --model <name>", "Modelo a usar")
+    .parse(process.argv);
+  const opts = rootChat.opts<{ agent?: string; provider?: string; model?: string }>();
   const { chatCommand } = await import("./commands/chat.js");
-  await chatCommand({});
+  await chatCommand(opts);
   process.exit(0);
 }
 

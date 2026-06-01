@@ -22,19 +22,31 @@ export class OpenAIProvider implements ModelProvider {
       ? [{ role: "system", content: opts.systemPrompt }, ...messages.filter((m) => m.role !== "system")]
       : messages;
 
+    const baseParams = {
+      model: opts.model ?? DEFAULT_MODEL,
+      temperature: opts.temperature ?? 0.4,
+      max_tokens: opts.maxTokens ?? 4096,
+      messages: withSystem.map((m) => ({ role: m.role, content: m.content })),
+    } as const;
+
+    if (opts.onChunk) {
+      const stream = await this.client.chat.completions.create({ ...baseParams, stream: true });
+      let fullText = "";
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content ?? "";
+        if (delta) {
+          opts.onChunk(delta);
+          fullText += delta;
+        }
+      }
+      return fullText.trim();
+    }
+
     const timeoutMs = resolveApiTimeoutMs();
     const res = await retryWithBackoff(async () => {
       try {
         return await withTimeout(
-          this.client.chat.completions.create({
-            model: opts.model ?? DEFAULT_MODEL,
-            temperature: opts.temperature ?? 0.4,
-            max_tokens: opts.maxTokens ?? 4096,
-            messages: withSystem.map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
-          }),
+          this.client.chat.completions.create(baseParams),
           timeoutMs,
           "openai",
         );
@@ -56,7 +68,6 @@ export class OpenAIProvider implements ModelProvider {
       },
     });
 
-    // Report token usage if callback provided
     opts.onUsage?.(res.usage?.prompt_tokens ?? 0, res.usage?.completion_tokens ?? 0);
 
     const text = res.choices[0]?.message?.content ?? "";
@@ -140,6 +151,25 @@ export class OpenAIProvider implements ModelProvider {
       };
     }
     return { type: "text", content: choice?.message?.content?.trim() ?? "" };
+  }
+
+  async *stream(messages: ChatMessage[], opts: CompletionOptions = {}): AsyncGenerator<string> {
+    const withSystem: ChatMessage[] = opts.systemPrompt
+      ? [{ role: "system", content: opts.systemPrompt }, ...messages.filter((m) => m.role !== "system")]
+      : messages;
+
+    const streamResult = await this.client.chat.completions.create({
+      model: opts.model ?? DEFAULT_MODEL,
+      temperature: opts.temperature ?? 0.4,
+      max_tokens: opts.maxTokens ?? 4096,
+      messages: withSystem.map((m) => ({ role: m.role, content: m.content })),
+      stream: true,
+    });
+
+    for await (const chunk of streamResult) {
+      const delta = chunk.choices[0]?.delta?.content ?? "";
+      if (delta) yield delta;
+    }
   }
 
   get supportsToolUse(): boolean {

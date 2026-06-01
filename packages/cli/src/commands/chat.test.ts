@@ -1,6 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseAction, suggestNext, safeCall } from "./chat.js";
+import { SLASH_COMMAND_CATALOG, type SlashCommand } from "@slad/shared";
+import { maybeOpenSlashPalette, parseAction, suggestNext, safeCall, shouldOpenSlashPaletteImmediately } from "./chat.js";
+import {
+  buildCliSlashCommandInsertion,
+  getAvailableCliSlashCommands,
+  getCliSlashHandlerIds,
+  getVisibleCliSlashCommands,
+  resolveCliSlashCommand,
+  searchCliSlashCommands,
+  searchAvailableCliSlashCommands,
+  validateInitialCliSlashCommandPayload,
+} from "./slash.js";
 import type { SessionState } from "../core/types.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -143,6 +154,11 @@ describe("parseAction", () => {
     it('"/PLAN" case insensitive → plan', () => {
       assert.deepEqual(parseAction("/PLAN", null), { type: "plan" });
     });
+
+    it("resolves aliases from the shared catalog", () => {
+      assert.deepEqual(parseAction("/ayuda", null), { type: "help" });
+      assert.deepEqual(parseAction("/ejecutar", null), { type: "run-next" });
+    });
   });
 
   describe("unknown slash commands", () => {
@@ -150,6 +166,129 @@ describe("parseAction", () => {
       const result = parseAction("/unknowncommand", null);
       assert.equal(result.type, "unknown");
     });
+  });
+});
+
+// ─── shared slash command adapter ────────────────────────────────────────────
+
+describe("CLI slash command adapter", () => {
+  it("keeps every real CLI slash handler represented in the shared catalog", () => {
+    const catalogCliIds = new Set(
+      SLASH_COMMAND_CATALOG.filter((command) => command.surfaces.includes("cli")).map((command) => command.id),
+    );
+    const missingCatalogEntries = getCliSlashHandlerIds().filter((id) => !catalogCliIds.has(id));
+
+    assert.deepEqual(missingCatalogEntries, []);
+  });
+
+  it("uses the shared catalog for visible CLI commands", () => {
+    const commands = getVisibleCliSlashCommands();
+    assert.ok(commands.length > 0);
+    assert.equal(commands.every((command) => SLASH_COMMAND_CATALOG.includes(command)), true);
+  });
+
+  it("filters by CLI surface, visibility, and handler availability", () => {
+    const base = SLASH_COMMAND_CATALOG.find((command) => command.id === "help");
+    assert.ok(base);
+
+    const hidden = { ...base, id: "hidden-help", visibility: { ...base.visibility, hidden: true } } satisfies SlashCommand;
+    const uiOnly = { ...base, id: "ui-help", surfaces: ["ui"] } satisfies SlashCommand;
+    const noHandler = { ...base, id: "unknown-help" } satisfies SlashCommand;
+    const informational = {
+      ...base,
+      id: "info-help",
+      visibility: { ...base.visibility, hidden: true },
+      executionIntent: {
+        kind: "session-message",
+        emitsSessionMessage: true,
+        invokesLocalAction: false,
+      },
+    } satisfies SlashCommand;
+
+    const commands = getVisibleCliSlashCommands([hidden, uiOnly, noHandler, informational]);
+    assert.deepEqual(commands.map((command) => command.id), ["info-help"]);
+  });
+
+  it("searches by id, title, alias, and category", () => {
+    assert.equal(searchCliSlashCommands("run").some((command) => command.id === "run"), true);
+    assert.equal(searchCliSlashCommands("New Session").some((command) => command.id === "new"), true);
+    assert.equal(searchCliSlashCommands("ejecutar").some((command) => command.id === "run"), true);
+    assert.equal(searchCliSlashCommands("observability").some((command) => command.id === "stats"), true);
+  });
+
+  it("filters palette commands by session availability metadata", () => {
+    const withoutSession = getAvailableCliSlashCommands(null).map((command) => command.id);
+    const withSession = getAvailableCliSlashCommands(makeSession(["explore", "snapshot"])).map((command) => command.id);
+    const withPlan = getAvailableCliSlashCommands(makeSession(["explore", "snapshot", "plan"])).map((command) => command.id);
+    const stateConditioned = SLASH_COMMAND_CATALOG.filter(
+      (command) =>
+        command.surfaces.includes("cli") &&
+        (command.config.requiresActiveSession || command.config.requiresPlan || command.id === "work-debate"),
+    );
+
+    assert.ok(stateConditioned.length > 0);
+    assert.equal(withoutSession.includes("snapshot"), false);
+    assert.equal(withoutSession.includes("run"), false);
+    assert.equal(withoutSession.includes("work-debate"), false);
+    assert.equal(withSession.includes("snapshot"), true);
+    assert.equal(withSession.includes("work-debate"), true);
+    assert.equal(withSession.includes("run"), false);
+    assert.equal(withPlan.includes("run"), true);
+  });
+
+  it("searches only commands available to the current session", () => {
+    assert.equal(searchAvailableCliSlashCommands("run", null).some((command) => command.id === "run"), false);
+    assert.equal(
+      searchAvailableCliSlashCommands("run", makeSession(["explore", "snapshot", "plan"])).some(
+        (command) => command.id === "run",
+      ),
+      true,
+    );
+  });
+
+  it("builds prompt insertion text without resolving handlers", () => {
+    const command = SLASH_COMMAND_CATALOG.find((item) => item.id === "help");
+    assert.ok(command);
+    assert.equal(buildCliSlashCommandInsertion(command), "/help");
+  });
+
+  it("opens the palette for a bare slash without resolving any command handler", async () => {
+    const session = makeSession(["explore", "snapshot", "plan"]);
+    let paletteCalls = 0;
+
+    const result = await maybeOpenSlashPalette("/", session, async (query, receivedSession) => {
+      paletteCalls += 1;
+      assert.equal(query, "");
+      assert.equal(receivedSession, session);
+      return "/help";
+    });
+
+    assert.equal(paletteCalls, 1);
+    assert.deepEqual(result, { opened: true, insertion: "/help" });
+    assert.deepEqual(parseAction("/", session), { type: "unknown", input: "/" });
+  });
+
+  it("detects a leading slash immediately while typing", () => {
+    assert.equal(shouldOpenSlashPaletteImmediately("", "/", {}), true);
+    assert.equal(shouldOpenSlashPaletteImmediately("", undefined, { name: "slash" }), true);
+    assert.equal(shouldOpenSlashPaletteImmediately("hola", "/", {}), false);
+    assert.equal(shouldOpenSlashPaletteImmediately("", "/", { ctrl: true }), false);
+  });
+
+  it("validates initial command payloads without arguments", () => {
+    const command = SLASH_COMMAND_CATALOG.find((item) => item.id === "help");
+    assert.ok(command);
+    assert.deepEqual(validateInitialCliSlashCommandPayload(command), { commandId: "help", args: {} });
+  });
+
+  it("resolves local handlers by command id and supports session messages", () => {
+    const help = SLASH_COMMAND_CATALOG.find((command) => command.id === "help");
+    const ask = SLASH_COMMAND_CATALOG.find((command) => command.id === "ask");
+    assert.ok(help);
+    assert.ok(ask);
+
+    assert.deepEqual(resolveCliSlashCommand(help, null).localAction, { type: "help" });
+    assert.equal(resolveCliSlashCommand(ask, null).sessionMessage?.includes("pregunta"), true);
   });
 });
 

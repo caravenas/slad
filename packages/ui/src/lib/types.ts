@@ -1,5 +1,5 @@
 import type { PipelineStageProgress } from "@slad/pipeline";
-import type { QuestionKind, StageName, TaskId } from "@slad/shared";
+import type { QuestionKind, SlashCommand, SlashCommandId, StageName, TaskId } from "@slad/shared";
 
 export type StageStatus = PipelineStageProgress;
 
@@ -151,3 +151,32 @@ export interface UITelemetryStats {
   classifierAccepted: number;
   avgDurationMs: number | null;
 }
+
+export interface UISlashCommandContext {
+  activeSessionId?: string | null;
+  hasWorkspaceTrust?: boolean;
+  hasProvider?: boolean;
+  hasPlan?: boolean;
+  allowExperimental?: boolean;
+}
+
+export interface UISlashCommandAvailability {
+  visible: boolean;
+  executable: boolean;
+  reason?: string;
+}
+
+export interface UISlashCommandPaletteItem {
+  command: SlashCommand;
+  availability: UISlashCommandAvailability;
+  matchedBy: "id" | "title" | "alias" | "category" | "keyword" | "all";
+}
+
+export interface UISlashCommandResult {
+  ok: boolean;
+  status: "executed" | "info" | "validation-error" | "not-executable";
+  message?: string;
+}
+
+export type UISlashCommandHandler = (command: SlashCommand) => void | UISlashCommandResult | Promise<void | UISlashCommandResult>;
+export type UISlashCommandHandlerMap = Partial<Record<SlashCommandId | string, UISlashCommandHandler>>;

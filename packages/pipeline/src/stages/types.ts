@@ -19,6 +19,9 @@ export interface SladServices extends PipelineServices {
   promptGuidance?: (stage: string, system: string) => string;
   /** Working directory for project context */
   workspace?: string;
+  /** Per-task progress callbacks (used by run stage) */
+  onTaskStart?: (taskId: string, title: string) => void;
+  onTaskComplete?: (taskId: string, status: string) => void;
 }
 
 /** Prompts inyectables */
