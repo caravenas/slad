@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { SessionState } from "@slad/shared";
@@ -33,6 +34,11 @@ export interface CreateSessionStateOptions {
   trimIntent?: boolean;
 }
 
+export function createSessionId(): string {
+  return crypto.randomBytes(6).toString("hex");
+}
+
+/** @deprecated Use createSessionId() \u2014 kept for tests and migration */
 export function slugifySessionIntent(value: string): string {
   return value
     .toLowerCase()
@@ -43,16 +49,10 @@ export function slugifySessionIntent(value: string): string {
     .slice(0, 40);
 }
 
-export function createSessionId(intent: string, now = new Date()): string {
-  const date = now.toISOString().slice(0, 10);
-  const time = now.toTimeString().slice(0, 8).replace(/:/g, "");
-  return `${date}-${time}-${slugifySessionIntent(intent)}`;
-}
-
 export function createSessionState(intent: string, options: CreateSessionStateOptions = {}): SessionState {
   const createdAt = options.createdAt ?? new Date().toISOString();
   return {
-    id: options.id ?? createSessionId(intent, new Date(createdAt)),
+    id: options.id ?? createSessionId(),
     createdAt,
     intent: options.trimIntent ? intent.trim() : intent,
     artifacts: [],

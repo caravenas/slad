@@ -89,7 +89,12 @@ export async function runCommand(opts: RunOpts): Promise<void> {
 
   // Pause the spinner while HITL prompts are active to avoid visual conflicts
   const hitl = {
-    ..._hitl,
+    kind: _hitl.kind,
+    canPrompt: () => _hitl.canPrompt(),
+    canInteract: () => _hitl.canInteract(),
+    askQuestion: (q: Parameters<typeof _hitl.askQuestion>[0]) => _hitl.askQuestion(q),
+    printHeader: _hitl.printHeader?.bind(_hitl),
+    printPaused: _hitl.printPaused?.bind(_hitl),
     collectAnswers: async (questions: Parameters<typeof _hitl.collectAnswers>[0]) => {
       if (spinner.isSpinning) spinner.stop();
       const answers = await _hitl.collectAnswers(questions);

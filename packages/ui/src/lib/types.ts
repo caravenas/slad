@@ -1,5 +1,5 @@
-import type { PipelineStageProgress } from "@slad/pipeline";
-import type { QuestionKind, SlashCommand, SlashCommandId, StageName, TaskId } from "@slad/shared";
+import type { PipelineStageProgress } from "@slad/pipeline/slad";
+import type { PipelineStageName, QuestionKind, SlashCommand, SlashCommandId, TaskId } from "@slad/shared";
 
 export type StageStatus = PipelineStageProgress;
 
@@ -139,7 +139,7 @@ export interface UIArtifact {
   estimated?: Record<string, unknown>;
 }
 
-export type UIStageName = StageName;
+export type UIStageName = PipelineStageName;
 
 export interface UITelemetryStats {
   totalRuns: number;

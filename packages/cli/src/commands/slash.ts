@@ -27,6 +27,9 @@ export type CliSlashLocalAction =
   | { type: "status" }
   | { type: "stats" }
   | { type: "version" }
+  | { type: "model" }
+  | { type: "agents" }
+  | { type: "agents-use"; id: string }
   | { type: "new" }
   | { type: "help" }
   | { type: "exit" };
@@ -69,6 +72,8 @@ const cliSlashCommandHandlers = {
   new: () => ({ localAction: { type: "new" } }),
   stats: () => ({ localAction: { type: "stats" } }),
   version: () => ({ localAction: { type: "version" } }),
+  model: () => ({ localAction: { type: "model" } }),
+  agents: () => ({ localAction: { type: "agents" } }),
   help: () => ({ localAction: { type: "help" } }),
   exit: () => ({ localAction: { type: "exit" } }),
 } satisfies Record<string, CliSlashCommandHandlerWithContext>;

@@ -1,4 +1,4 @@
-import { archiveSessionFile, findSessionFilePath as findPipelineSessionFilePath } from "@slad/pipeline";
+import { archiveSessionFile, findSessionFilePath as findPipelineSessionFilePath } from "@slad/pipeline/session";
 import { SESSION_DIR } from "./slad-server";
 
 export function resolveSessionDir(): string {

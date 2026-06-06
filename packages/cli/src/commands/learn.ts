@@ -8,7 +8,7 @@ import { log } from "../core/logger.js";
 import { readArtifact, writeArtifact, listArtifacts } from "../persistence/index.js";
 import { createHitlTransport } from "@slad/hitl";
 import * as prompts from "../agents/prompts.js";
-import { getActiveSession } from "../core/session.js";
+import { getOrCreateSession, appendArtifact, saveSession } from "../core/session.js";
 import type { SessionState, RunOutput } from "../core/types.js";
 
 export interface LearnOpts {
@@ -56,7 +56,7 @@ async function readSessionRuns(session: SessionState, ): Promise<Array<{ source:
 
 export async function learnCommand(opts: LearnOpts): Promise<void> {
   const cwd = opts.cwd ?? process.cwd();
-  const session = opts.skipSession ? null : getActiveSession(cwd);
+  const session = opts.skipSession ? null : getOrCreateSession("learn", cwd);
 
   const config = loadConfig();
   const providerName = resolveProvider(opts.provider, opts.agent, config.defaultProvider, config.defaultAgent);
@@ -103,7 +103,10 @@ export async function learnCommand(opts: LearnOpts): Promise<void> {
       spinner = ora(`Ejecutando ${stage}...`).start();
     },
     onArtifact: async (stage, artifact) => {
-      await writeArtifact(stage as any, artifact as any, { sessionId: session?.id ?? "adhoc" });
+      if (session) {
+        const ref = await writeArtifact(stage as any, artifact as any, { sessionId: session.id });
+        saveSession(appendArtifact(session, stage as any, ref.path));
+      }
     },
     onStageComplete: (stage) => {
        if (spinner.isSpinning) spinner.succeed(`${stage} completado`);

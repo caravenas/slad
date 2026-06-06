@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { parseSladWorkRequest } from "@slad/pipeline";
+import { parseSladWorkRequest } from "@slad/pipeline/slad";
 import { createLocalSession, readSladUiState } from "../../../../lib/slad-server";
 import { startModeJob } from "../../../../lib/slad-jobs";
 

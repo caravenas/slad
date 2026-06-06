@@ -93,12 +93,28 @@ describe("parseAction", () => {
       assert.deepEqual(parseAction("/status", null), { type: "status" });
     });
 
+    it('"/model" → model wizard', () => {
+      assert.deepEqual(parseAction("/model", null), { type: "model" });
+    });
+
     it('"/new" → new', () => {
       assert.deepEqual(parseAction("/new", null), { type: "new" });
     });
 
     it('"/reset" → new', () => {
       assert.deepEqual(parseAction("/reset", null), { type: "new" });
+    });
+
+    it('"/agents" → agents (list)', () => {
+      assert.deepEqual(parseAction("/agents", null), { type: "agents" });
+    });
+
+    it('"/agents use developer" → agents-use', () => {
+      assert.deepEqual(parseAction("/agents use developer", null), { type: "agents-use", id: "developer" });
+    });
+
+    it('"/agents bogus" → unknown', () => {
+      assert.deepEqual(parseAction("/agents bogus", null), { type: "unknown", input: "/agents bogus" });
     });
   });
 
@@ -289,6 +305,9 @@ describe("CLI slash command adapter", () => {
 
     assert.deepEqual(resolveCliSlashCommand(help, null).localAction, { type: "help" });
     assert.equal(resolveCliSlashCommand(ask, null).sessionMessage?.includes("pregunta"), true);
+    const model = SLASH_COMMAND_CATALOG.find((command) => command.id === "model");
+    assert.ok(model);
+    assert.deepEqual(resolveCliSlashCommand(model, null).localAction, { type: "model" });
   });
 });
 

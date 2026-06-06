@@ -1,6 +1,9 @@
 export * from "./constants.js";
 export * from "./schemas.js";
 export {
+  AGENT_CATALOG,
+  AgentDescriptor,
+  DEFAULT_AGENT_ID,
   PipelineStageName,
   SLASH_COMMAND_CATALOG,
   SlashCommand,
@@ -20,6 +23,7 @@ export {
   SladSettings,
 } from "./schemas.js";
 export type {
+  AgentDescriptor as AgentDescriptorType,
   PipelineStageName as PipelineStageNameType,
   SlashCommand as SlashCommandType,
   SlashCommandArg as SlashCommandArgTypeValue,

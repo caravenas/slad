@@ -1,5 +1,5 @@
 import type { ChildProcess } from "node:child_process";
-import { commandForMode, commandForStage, type SladPipelineStage, type SladRunMode } from "@slad/pipeline";
+import { commandForMode, commandForStage, type SladPipelineStage, type SladRunMode } from "@slad/pipeline/slad";
 import { setActiveSession, spawnSladCli } from "./slad-server";
 
 type LogStream = "stdout" | "stderr" | "system";

@@ -10,8 +10,9 @@ import { createHarness } from "@slad/harness";
 import { loadHarnessConfig } from "../harness/config.js";
 
 import { createHitlTransport } from "@slad/hitl";
-import * as prompts from "../agents/prompts.js";
-import { writeArtifact } from "../persistence/index.js";
+import { getActiveAgent } from "../agents/registry.js";
+import { writeArtifact, readArtifact } from "../persistence/index.js";
+import { getOrCreateSession, getActiveSession, appendArtifact, saveSession, lastArtifactPath } from "../core/session.js";
 import { appendBudgetHistory } from "@slad/context-budget";
 import { getDocsRoot } from "../persistence/layout.js";
 import { ProviderError } from "../core/errors.js";
@@ -121,7 +122,9 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
     }
   }
 
-  log.title(`Auto · ${providerName}${model ? ` · ${model}` : ""}`);
+  const activeAgent = getActiveAgent();
+
+  log.title(`Auto · ${activeAgent.descriptor.label} · ${providerName}${model ? ` · ${model}` : ""}`);
   log.dim(`  intent: ${intent}`);
   if (opts.dryRun) log.dim("  modo: dry-run (solo explore+snapshot+plan)");
   if (opts.maxCost !== undefined) log.dim(`  budget: $${opts.maxCost}`);
@@ -137,12 +140,16 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
 
   // Pause spinner while HITL prompts are active to avoid visual conflicts
   const hitl = {
-    ..._hitl,
+    kind: _hitl.kind,
+    canPrompt: () => _hitl.canPrompt(),
+    canInteract: () => _hitl.canInteract(),
+    askQuestion: (q: Parameters<typeof _hitl.askQuestion>[0]) => _hitl.askQuestion(q),
+    printHeader: _hitl.printHeader?.bind(_hitl),
+    printPaused: _hitl.printPaused?.bind(_hitl),
     collectAnswers: async (questions: Parameters<typeof _hitl.collectAnswers>[0]) => {
       const prevText = spinner.text;
       if (spinner.isSpinning) spinner.stop();
       const answers = await _hitl.collectAnswers(questions);
-      // Restart spinner with same text so progress continues after HITL
       spinner = ora(prevText).start();
       return answers;
     },
@@ -151,18 +158,55 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
 
-  const pipelineStages: SladPipelineStageId[] = opts.dryRun
-    ? ["explore", "snapshot", "plan"]
-    : (opts.skipLearn ? ["explore", "snapshot", "plan", "run"] : ["explore", "snapshot", "plan", "run", "learn"]);
+  // Stages come from the active agent; dry-run / skip-learn subset them
+  // (intersecting, so we never assume a fixed stage order).
+  const dropStages = new Set<SladPipelineStageId>([
+    ...(opts.dryRun ? (["run", "learn"] as SladPipelineStageId[]) : []),
+    ...(opts.skipLearn ? (["learn"] as SladPipelineStageId[]) : []),
+  ]);
+  let pipelineStages = activeAgent.descriptor.stages.filter(
+    (stage): stage is SladPipelineStageId => stage !== "evolve" && !dropStages.has(stage as SladPipelineStageId),
+  );
+  let resumeInput: unknown = undefined;
+  let existingSession = opts.fresh ? null : getActiveSession();
+
+  // Resume: if there's an active session with artifacts, offer to skip completed stages.
+  if (existingSession) {
+    const completedStages = pipelineStages.filter(stage =>
+      existingSession!.artifacts.some(a => a.kind === stage),
+    );
+    const remainingStages = pipelineStages.filter(s => !completedStages.includes(s));
+    const lastStage = completedStages[completedStages.length - 1];
+    const nextStage = remainingStages[0];
+
+    if (lastStage && nextStage) {
+      spinner.stop();
+      const doResume = await select({
+        message: `Sesión con stages completados (${completedStages.join(", ")}). ¿Retomar desde ${nextStage}?`,
+        choices: [
+          { name: `Retomar desde ${nextStage}`, value: true },
+          { name: "Empezar de nuevo (desde explore)", value: false },
+        ],
+      });
+      if (doResume) {
+        const artifactPath = lastArtifactPath(existingSession!, lastStage as any);
+        if (artifactPath) {
+          const { value } = await readArtifact(lastStage as any, artifactPath);
+          resumeInput = value;
+          pipelineStages = remainingStages;
+        }
+      } else {
+        existingSession = null;
+      }
+      spinner = ora("Iniciando pipeline...").start();
+    }
+  }
+
+  let activeSession = existingSession ?? getOrCreateSession(intent);
 
   const pipeline = buildSladPipeline({
     stages: pipelineStages,
-    prompts: {
-      explorer: prompts.EXPLORER_SYSTEM,
-      snapshot: prompts.SNAPSHOT_SYSTEM,
-      planner: prompts.PLANNER_SYSTEM,
-      builderReviewer: prompts.BUILDER_REVIEWER_SYSTEM,
-    },
+    prompts: activeAgent.prompts,
     ...(opts.maxCost !== undefined ? { policies: { budget: { maxUsd: opts.maxCost } } } : {}),
   });
 
@@ -188,7 +232,7 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   });
 
   const result = await agent.run(
-    { intent },
+    resumeInput ?? { intent },
     {
       onStageStart: (stage: string) => {
         if (spinner.isSpinning) spinner.stop();
@@ -196,7 +240,9 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
       },
       onArtifact: async (stage: string, artifact: unknown) => {
         if (stage !== "run") {
-          await writeArtifact(stage as any, artifact as any, { sessionId: "auto" });
+          const ref = await writeArtifact(stage as any, artifact as any, { sessionId: activeSession!.id });
+          activeSession = appendArtifact(activeSession!, stage as any, ref.path);
+          saveSession(activeSession);
         }
       },
       onStageComplete: (stage: string) => {
@@ -228,7 +274,7 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   writeAutoReport({ status: result.status, outputs }, { docsRoot, basename: "auto" });
 
   appendBudgetHistory({
-    sessionId: "auto",
+    sessionId: activeSession!.id,
     intent,
     model: model ?? "unknown",
     provider: providerName,
@@ -241,7 +287,7 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   });
 
   await appendAgentRunLog({
-    sessionId: "auto",
+    sessionId: activeSession!.id,
     intent,
     startedAt,
     completedAt: new Date().toISOString(),

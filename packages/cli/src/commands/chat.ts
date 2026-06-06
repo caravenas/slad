@@ -2,7 +2,7 @@ import readline from "node:readline";
 import ora from "ora";
 import kleur from "kleur";
 import { input as promptInput, select } from "@inquirer/prompts";
-import { loadConfig, resolveProvider, getApiKey, getModel } from "../core/config.js";
+import { loadConfig, resolveProvider, getApiKey, getModel, getActiveAgentId } from "../core/config.js";
 import { getSladProvider } from "../core/providers.js";
 import { log } from "../core/logger.js";
 import {
@@ -19,7 +19,11 @@ import { runCommand } from "./run.js";
 import { learnCommand } from "./learn.js";
 import { evolveCommand } from "./evolve.js";
 import { autoCommand } from "./auto.js";
+import { modelCommand } from "./model.js";
 import { statsCommand } from "./stats.js";
+import { selectAgentInteractive } from "./agents.js";
+import { classifyIntent } from "../core/classifier.js";
+import { setActiveAgent, type AgentRuntime } from "../agents/registry.js";
 import { sessionShowCommand } from "./session.js";
 import { makeHeader } from "../cli/ui.js";
 import { getFormattedCliVersion } from "../cli/version.js";
@@ -87,6 +91,12 @@ export function parseAction(raw: string, _session: SessionState | null): ChatAct
       if (command.id === "auto" && tail) return { type: "auto", intent: tail };
       if (command.id === "work-debate" && tail) return { type: "auto-debate", intent: tail };
       if (command.id === "explore" && tail) return { type: "explore", intent: tail };
+      if (command.id === "agents") {
+        const useMatch = tail.match(/^use\s+(\S+)$/i);
+        if (useMatch) return { type: "agents-use", id: useMatch[1]! };
+        if (!tail) return { type: "agents" };
+        return { type: "unknown", input: trimmed };
+      }
       if (tail) return { type: "unknown", input: trimmed };
 
       const result = resolveCliSlashCommand(command, _session);
@@ -159,20 +169,22 @@ export async function maybeOpenSlashPalette(
 async function readChatPrompt(
   defaultValue: string | undefined,
   session: SessionState | null,
+  agentLabel?: string,
   openPalette: typeof openCliSlashCommandPalette = openCliSlashCommandPalette,
   inputStream: ChatInputStream = process.stdin,
   outputStream: ChatOutputStream = process.stdout,
 ): Promise<ChatInputPromptResult> {
+  const indicator = agentLabel ? `${kleur.magenta(agentLabel)} ${kleur.cyan("❯")}` : kleur.cyan("❯");
   if (!inputStream.isTTY || !outputStream.isTTY || !inputStream.setRawMode) {
     const value = await promptInput({
-      message: kleur.cyan("❯"),
+      message: indicator,
       default: defaultValue,
       theme: { prefix: "" },
     });
     return { type: "input", value };
   }
 
-  const prompt = `${kleur.cyan("❯")} `;
+  const prompt = `${indicator} `;
   let value = defaultValue ?? "";
   const wasRaw = inputStream.isRaw ?? false;
 
@@ -362,6 +374,29 @@ async function executeAction(
       const model = opts.model ?? getModel(providerName);
       const provider = await getSladProvider(providerName, apiKey ?? undefined);
 
+      // Smart routing: classify longer messages to detect pipeline intents.
+      if (action.message.length > 20) {
+        const routing = await classifyIntent(action.message, provider as any, providerName).catch(() => null);
+        if (routing?.mode === "work" && routing.confidence >= 0.75) {
+          const pct = Math.round(routing.confidence * 100);
+          console.log(kleur.dim(`\n  → ${routing.rationale} (${pct}%)`));
+          const go = await select({
+            message: "¿Cómo continuar?",
+            choices: [
+              { name: "Ejecutar pipeline", value: true },
+              { name: "Solo responder", value: false },
+            ],
+          });
+          if (go) {
+            await safeCall(() => autoCommand(action.message, {
+              provider: opts.provider, agent: opts.agent, model: opts.model, classify: false,
+            }));
+            session = getActiveSessionId() ? getActiveSession() : session;
+            break;
+          }
+        }
+      }
+
       const startTime = Date.now();
       const spinner = ora({ text: kleur.dim("…"), color: "cyan" }).start();
       try {
@@ -473,6 +508,15 @@ async function executeAction(
       console.log(await getFormattedCliVersion());
       break;
 
+    case "model":
+      await modelCommand();
+      break;
+
+    case "agents":
+    case "agents-use":
+      // Handled in the REPL loop (interactive picker + agent mode).
+      break;
+
     case "new": {
       const confirmed = await select({
         message: "¿Empezar una nueva sesión?",
@@ -534,11 +578,14 @@ export async function chatCommand(opts: ChatOpts): Promise<void> {
   });
 
   let nextInputDefault: string | undefined;
+  // When an agent is active, plain-text input is routed straight to its pipeline
+  // (auto mode) instead of the chat model. null = normal chat mode.
+  let agentMode: AgentRuntime | null = null;
 
   while (true) {
     let userInput: string;
     try {
-      const promptResult = await readChatPrompt(nextInputDefault, session);
+      const promptResult = await readChatPrompt(nextInputDefault, session, agentMode?.descriptor.label);
       nextInputDefault = undefined;
       if (promptResult.type === "palette") {
         if (promptResult.insertion) nextInputDefault = promptResult.insertion;
@@ -561,6 +608,13 @@ export async function chatCommand(opts: ChatOpts): Promise<void> {
       trimmedInput !== "/" && trimmedInput.startsWith("/") ? resolveCliSlashInput(userInput, session) : null;
     const resolvedSlash = slashResult;
 
+    // /chat leaves agent mode and returns to the conversational model.
+    if (agentMode && resolvedSlash?.command.id === "chat") {
+      agentMode = null;
+      console.log("\n  " + kleur.dim("Volviste al modo chat.") + "\n");
+      continue;
+    }
+
     if (resolvedSlash?.sessionMessage) {
       console.log("\n  " + kleur.dim(resolvedSlash.sessionMessage) + "\n");
     }
@@ -568,6 +622,50 @@ export async function chatCommand(opts: ChatOpts): Promise<void> {
     if (resolvedSlash && !resolvedSlash.localAction) continue;
 
     const action = resolvedSlash?.localAction ?? parseAction(userInput, session);
+
+    // /agents → interactive picker; selecting an agent activates it and enters
+    // agent mode so the next prompt goes straight to the pipeline.
+    if (action.type === "agents") {
+      const picked = await selectAgentInteractive(agentMode?.descriptor.id ?? getActiveAgentId());
+      if (picked) {
+        agentMode = setActiveAgent(picked);
+        log.success(`Agente activo: ${agentMode.descriptor.label}.`);
+        console.log(
+          "  " + kleur.dim("Escribe tu intención y Enter. ") +
+          kleur.cyan("/chat") + kleur.dim(" para volver al chat · ") +
+          kleur.cyan("/agents") + kleur.dim(" para cambiar.") + "\n",
+        );
+      }
+      continue;
+    }
+
+    // /agents use <id> → activate directly and enter agent mode.
+    if (action.type === "agents-use") {
+      try {
+        agentMode = setActiveAgent(action.id);
+        log.success(`Agente activo: ${agentMode.descriptor.label}.`);
+      } catch (err) {
+        log.error((err as Error).message);
+      }
+      continue;
+    }
+
+    // In agent mode, plain text goes through the classifier first (same as a
+    // direct /auto call), so conversational questions are answered directly.
+    if (agentMode && action.type === "chat" && action.message) {
+      await safeCall(() =>
+        autoCommand(action.message, {
+          provider: opts.provider,
+          agent: opts.agent,
+          model: opts.model,
+        }),
+      );
+      session = getActiveSessionId() ? getActiveSession() : session;
+      console.log("");
+      console.log("  " + suggestNext(session));
+      console.log("");
+      continue;
+    }
 
     if (action.type === "exit") {
       console.log(kleur.dim("\n\nHasta luego."))

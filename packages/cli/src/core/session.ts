@@ -70,6 +70,12 @@ export function createSession(intent: string, cwd = process.cwd()): SessionState
   return session;
 }
 
+export function getOrCreateSession(intent: string, cwd = process.cwd()): SessionState {
+  const existing = getActiveSession(cwd);
+  if (existing) return existing;
+  return createSession(intent, cwd);
+}
+
 export function saveSession(session: SessionState, cwd = process.cwd()): void {
   writeSessionFile(sessionsRoot(cwd), session);
 }

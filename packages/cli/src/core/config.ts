@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import dotenv from "dotenv";
 import { AgentName, DevAgentConfig, ProviderName, type ProviderName as ProviderNameType } from "./types.js";
+import { DEFAULT_AGENT_ID } from "@slad/shared";
+import { backendEnvPatch, CliBackendId } from "./backend-registry.js";
 
 const DEFAULT_MODELS: Record<ProviderNameType, string> = {
   anthropic: "MiniMax-M2.7",
@@ -24,10 +26,46 @@ function readJson(filePath: string): Record<string, unknown> {
   }
 }
 
+function deepMerge(base: Record<string, unknown>, patch: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...base };
+  for (const [key, value] of Object.entries(patch)) {
+    const baseValue = result[key];
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      baseValue &&
+      typeof baseValue === "object" &&
+      !Array.isArray(baseValue)
+    ) {
+      result[key] = deepMerge(baseValue as Record<string, unknown>, value as Record<string, unknown>);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+export function getGlobalConfigPath(): string {
+  return path.join(os.homedir(), ".slad", "config.json");
+}
+
+export function writeGlobalConfigPatch(
+  patch: Record<string, unknown>,
+  configPath = getGlobalConfigPath(),
+): Record<string, unknown> {
+  const existing = readJson(configPath);
+  const next = deepMerge(existing, patch);
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(configPath, JSON.stringify(next, null, 2) + "\n", "utf8");
+  return next;
+}
+
 function settingsValue<T = unknown>(pathParts: string[], cwd = process.env.SLAD_WORKSPACE ?? process.cwd()): T | undefined {
+  const globalOnlyKeys = new Set(["activeProfileId", "activeAgentId"]);
   const files = [
-    path.join(os.homedir(), ".slad", "config.json"),
-    ...(pathParts[0] === "activeProfileId" ? [] : [path.join(cwd, ".slad-os", "config.json")]),
+    getGlobalConfigPath(),
+    ...(globalOnlyKeys.has(pathParts[0]!) ? [] : [path.join(cwd, ".slad-os", "config.json")]),
   ];
   let current: unknown;
   for (const file of files) {
@@ -128,21 +166,22 @@ export function resolveProvider(
 }
 
 function applyAgentEnv(agent: import("@slad/shared").AgentName): void {
+  const configuredBinary = settingsValue<string>(["providers", "binaries", agent]);
+  const configuredAgentModel = settingsValue<string>(["providers", "agentModels", agent]);
+  const configuredCliModel = settingsValue<string>(["providers", "models", "cli"]);
+
+  if (agent === "codex" || agent === "claude") {
+    const model = envValue("CLI_MODEL") ?? configuredAgentModel ?? configuredCliModel ?? (agent === "claude" ? "sonnet" : undefined);
+    const envPatch = backendEnvPatch(CliBackendId.parse(agent), model, configuredBinary);
+    if (process.env.SLAD_CLI_INHERIT_API_KEYS) delete envPatch.SLAD_CLI_INHERIT_API_KEYS;
+    Object.assign(process.env, envPatch);
+    process.env.SLAD_CLI_INHERIT_API_KEYS ??= "false";
+    return;
+  }
+
   process.env.SLAD_CLI_MODEL_ARG = "--model";
   process.env.SLAD_CLI_INHERIT_API_KEYS ??= "false";
   switch (agent) {
-    case "codex":
-      process.env.SLAD_CLI_BINARY = "codex";
-      process.env.SLAD_CLI_ARGS = "exec --skip-git-repo-check --sandbox workspace-write --color never";
-      process.env.SLAD_CLI_PROMPT_MODE = "stdin";
-      process.env.CLI_MODEL = "";
-      break;
-    case "claude":
-      process.env.SLAD_CLI_BINARY = "claude";
-      process.env.SLAD_CLI_ARGS = "--print";
-      process.env.SLAD_CLI_PROMPT_MODE = "arg";
-      if (!envValue("CLI_MODEL")) process.env.CLI_MODEL = "sonnet";
-      break;
     case "gemini":
       process.env.SLAD_CLI_BINARY = "gemini";
       process.env.SLAD_CLI_ARGS = "";
@@ -166,6 +205,16 @@ export function parseCliDiscoveryAnswer(answer: string | undefined): string | nu
   const parts = value.split(" | ").map((part) => part.trim()).filter(Boolean);
   if (parts.length >= 2 && parts[1]) return parts[1];
   return parts[0] ?? null;
+}
+
+/** The active agent id (global config), defaulting to the developer agent. */
+export function getActiveAgentId(): string {
+  return settingsValue<string>(["activeAgentId"]) ?? DEFAULT_AGENT_ID;
+}
+
+/** Persist the active agent id to the global config. */
+export function setActiveAgentId(id: string): void {
+  writeGlobalConfigPatch({ activeAgentId: id });
 }
 
 export function withPromptGuidance(stage: string, basePrompt: string): string {

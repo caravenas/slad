@@ -61,9 +61,45 @@ function extractJsonBody(raw: string): string {
   return body.trim();
 }
 
-/** Fix common JSON issues: trailing commas, single quotes, etc. */
+/**
+ * Escape raw control characters (< 0x20) inside JSON string literals.
+ * The model sometimes emits literal newlines in string fields; JSON.parse rejects those.
+ */
+function escapeControlCharsInStrings(raw: string): string {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < raw.length; i++) {
+    const char = raw[i]!;
+    const code = raw.charCodeAt(i);
+    if (escaped) {
+      result += char;
+      escaped = false;
+    } else if (char === "\\") {
+      result += char;
+      escaped = true;
+    } else if (char === '"') {
+      result += char;
+      inString = !inString;
+    } else if (inString && code < 0x20) {
+      switch (char) {
+        case "\n": result += "\\n"; break;
+        case "\r": result += "\\r"; break;
+        case "\t": result += "\\t"; break;
+        default: result += `\\u${code.toString(16).padStart(4, "0")}`; break;
+      }
+    } else {
+      result += char;
+    }
+  }
+  return result;
+}
+
+/** Fix common JSON issues: trailing commas, unescaped control chars in strings. */
 function fixJsonString(raw: string): string {
   let fixed = raw;
+  // Escape raw control characters inside string literals before any other fix
+  fixed = escapeControlCharsInStrings(fixed);
   // Remove trailing commas before } or ]
   fixed = fixed.replace(/,\s*([}\]])/g, "$1");
   // Remove JS-style comments

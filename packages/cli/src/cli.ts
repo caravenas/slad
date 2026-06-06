@@ -8,6 +8,8 @@ import { learnCommand } from "./commands/learn.js";
 import { evolveCommand } from "./commands/evolve.js";
 import { autoCommand } from "./commands/auto.js";
 import { statsCommand } from "./commands/stats.js";
+import { agentsListCommand, agentsUseCommand } from "./commands/agents.js";
+import { modelCommand } from "./commands/model.js";
 import {
   sessionStartCommand,
   sessionListCommand,
@@ -69,6 +71,13 @@ program
   .option("--json", "Imprimir JSON plano en stdout")
   .action(async (opts) => {
     await statsCommand(opts);
+  });
+
+program
+  .command("model")
+  .description("Configura el proveedor CLI, binario y modelo por defecto global.")
+  .action(async () => {
+    await modelCommand();
   });
 
 program
@@ -295,14 +304,29 @@ sessionCmd
     await sessionShowCommand();
   });
 
+const agentsCmd = program
+  .command("agents")
+  .description("Lista los agentes disponibles y muestra el activo.")
+  .action(() => {
+    agentsListCommand();
+  });
+
+agentsCmd
+  .command("use <id>")
+  .description("Cambia el agente activo (ej. slad agents use developer).")
+  .action((id: string) => {
+    agentsUseCommand(id);
+  });
+
 // When slad is invoked with no subcommand (or only global flags like --agent),
 // open the interactive chat.  We detect this by checking whether argv contains
 // any positional token that matches a known subcommand.
 const knownCommands = new Set(program.commands.map((c) => c.name()));
 const userArgs = process.argv.slice(2);
 const hasSubcommand = userArgs.some((a) => knownCommands.has(a));
+const hasRootProgramFlag = userArgs.some((a) => ["--version", "-V", "--help", "-h"].includes(a));
 
-if (!hasSubcommand) {
+if (!hasSubcommand && !hasRootProgramFlag) {
   // Parse --agent / --provider / --model from argv manually so they work at the root level.
   const rootChat = new Command("slad")
     .allowUnknownOption(false)

@@ -17,7 +17,7 @@ import { log } from "../core/logger.js";
 import { hashStructured, hashText, readOrCreateReusableValue } from "@slad/cache";
 import { projectContextBlock } from "../core/context.js";
 import {
-  getActiveSession,
+  getOrCreateSession,
   lastArtifactPath,
   appendArtifact,
   saveSession,
@@ -197,7 +197,7 @@ export async function generatePlanOutput(options: {
 }
 
 export async function planCommand(opts: PlanOpts): Promise<void> {
-  const session = opts.skipSession ? null : getActiveSession();
+  const session = opts.skipSession ? null : getOrCreateSession("plan");
 
   // Resolve input from session if not explicit
   const inputPath =
@@ -345,9 +345,5 @@ export async function planCommand(opts: PlanOpts): Promise<void> {
     saveSession(appendArtifact(session, "plan", ref.path));
     log.success(`Guardado en ${ref.path}`);
     log.dim(`  sesión: ${session.id}`);
-  } else {
-    const ref = await writeArtifact("plan", output, { sessionId: "adhoc" });
-    if (opts.output) log.warn("--output para plan está deprecado; se escribió en la persistencia MD+YAML.");
-    log.success(`Guardado en ${ref.path}`);
   }
 }

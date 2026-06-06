@@ -434,15 +434,12 @@ test("session helpers centralizan ids, envelopes y answers", () => {
   const session = createSessionState("  Extraer sesión ágil  ", { createdAt, trimIntent: true });
 
   assert.equal(slugifySessionIntent("Sesión ágil / Plan"), "sesion-agil-plan");
-  assert.equal(createSessionId("Sesión ágil / Plan", now), "2026-05-25-154500-sesion-agil-plan");
-  assert.deepEqual(session, {
-    id: "2026-05-25-154500-extraer-sesion-agil",
-    createdAt,
-    intent: "Extraer sesión ágil",
-    artifacts: [],
-    humanAnswers: [],
-    notes: [],
-  });
+  assert.match(createSessionId(), /^[0-9a-f]{12}$/);
+  assert.match(session.id, /^[0-9a-f]{12}$/);
+  assert.deepEqual(
+    { ...session, id: "<hash>" },
+    { id: "<hash>", createdAt, intent: "Extraer sesión ágil", artifacts: [], humanAnswers: [], notes: [] },
+  );
 
   assert.deepEqual(createSessionEnvelope(session), {
     kind: "session",

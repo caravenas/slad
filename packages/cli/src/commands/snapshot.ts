@@ -15,7 +15,7 @@ import {
 import { projectContextBlock } from "../core/context.js";
 import { log } from "../core/logger.js";
 import {
-  getActiveSession,
+  getOrCreateSession,
   lastArtifactPath,
   appendArtifact,
   saveSession,
@@ -157,7 +157,7 @@ async function buildUserContent(opts: SnapshotOpts, sessionCtx: string): Promise
 }
 
 export async function snapshotCommand(opts: SnapshotOpts): Promise<void> {
-  const session = opts.skipSession ? null : getActiveSession();
+  const session = opts.skipSession ? null : getOrCreateSession(opts.intent ?? "snapshot");
 
   if (!opts.input && !opts.intent && session) {
     const explorePath = lastArtifactPath(session, "explore");
@@ -258,9 +258,5 @@ export async function snapshotCommand(opts: SnapshotOpts): Promise<void> {
     saveSession(appendArtifact(session, "snapshot", ref.path));
     log.success(`Guardado en ${ref.path}`);
     log.dim(`  sesión: ${session.id}`);
-  } else {
-    const ref = await writeArtifact("snapshot", output, { sessionId: "adhoc" });
-    if (opts.output) log.warn("--output para snapshot está deprecado; se escribió en la persistencia MD+YAML.");
-    log.success(`Guardado en ${ref.path}`);
   }
 }

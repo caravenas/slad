@@ -2,25 +2,27 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  SLAD_PIPELINE_STAGES,
-  activePipelineStageIndex,
   createSessionState,
   extractMarkdownSection,
   listSessionStateFiles,
+  loadSessionStateFileFromDir,
+  readActiveSessionId as readPipelineActiveSessionId,
+  setActiveSessionFile,
+  upsertSessionAnswers,
+  writeSessionFile,
+  type ParsedDataFile,
+} from "@slad/pipeline/session";
+import {
+  SLAD_PIPELINE_STAGES,
+  activePipelineStageIndex,
   listStageArtifacts,
   nextPipelineStageFromProgress,
   nextStageAfter,
   readAgentRunLog,
-  loadSessionStateFileFromDir,
-  readActiveSessionId as readPipelineActiveSessionId,
-  setActiveSessionFile,
   stageStatusesForSession,
   summarizeTelemetry,
-  upsertSessionAnswers,
-  writeSessionFile,
-  type ParsedDataFile,
   type SladPipelineStage,
-} from "@slad/pipeline";
+} from "@slad/pipeline/slad";
 import type { SessionArtifactKind, SessionState } from "@slad/shared";
 import { resolveUiDocsRoot } from "./config";
 import type {

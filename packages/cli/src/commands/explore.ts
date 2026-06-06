@@ -14,7 +14,7 @@ import {
 } from "../core/hitl.js";
 import { log } from "../core/logger.js";
 import { SchemaError } from "../core/errors.js";
-import { getActiveSession, appendArtifact, saveSession, sessionContextBlock, lastArtifactPath } from "../core/session.js";
+import { getOrCreateSession, appendArtifact, saveSession, sessionContextBlock, lastArtifactPath } from "../core/session.js";
 import { writeArtifact, readArtifact } from "../persistence/index.js";
 import { readWikiContextCached } from "../agents/explorer.js";
 import { hashStructured, hashText, readOrCreateReusableValue } from "@slad/cache";
@@ -139,7 +139,7 @@ export async function exploreCommand(intent: string, opts: ExploreOpts): Promise
 
   log.title(`Explorer · ${providerName}${model ? ` · ${model}` : ""}`);
   log.dim(`intent: ${intent}`);
-  const session = opts.skipSession ? null : getActiveSession();
+  const session = opts.skipSession ? null : getOrCreateSession(intent);
   const sessionCtx = session ? sessionContextBlock(session) : "";
   const messages: ChatMessage[] = [];
   const maxRounds = 3;
@@ -275,9 +275,5 @@ export async function exploreCommand(intent: string, opts: ExploreOpts): Promise
     saveSession(appendArtifact(session, "explore", ref.path));
     log.success(`Guardado en ${ref.path}`);
     log.dim(`  sesión: ${session.id}`);
-  } else if (opts.output) {
-    const ref = await writeArtifact("explore", output, { sessionId: "adhoc" });
-    log.warn("--output para explore está deprecado; se escribió en la persistencia MD+YAML.");
-    log.success(`Guardado en ${ref.path}`);
   }
 }

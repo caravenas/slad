@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { parseSladPipelineRunRequest } from "@slad/pipeline";
+import { parseSladPipelineRunRequest } from "@slad/pipeline/slad";
 import { readSladUiState } from "../../../../lib/slad-server";
 import { startPipelineJob } from "../../../../lib/slad-jobs";
 

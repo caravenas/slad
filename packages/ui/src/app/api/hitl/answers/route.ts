@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { parseSladHumanAnswersRequest } from "@slad/pipeline";
+import { parseSladHumanAnswersRequest } from "@slad/pipeline/slad";
 import { readSladUiState, saveHumanAnswers } from "../../../../lib/slad-server";
 
 export const runtime = "nodejs";

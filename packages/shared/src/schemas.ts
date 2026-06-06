@@ -83,11 +83,37 @@ export type TaskId = z.infer<typeof TaskId>;
 export const LearnTaskId = z.union([TaskId, z.literal("all")]);
 export type LearnTaskId = z.infer<typeof LearnTaskId>;
 
-export const PipelineStageName = z.enum(STAGE_NAMES);
+export const PIPELINE_STAGE_NAMES = [...STAGE_NAMES, "research"] as const;
+export const PipelineStageName = z.enum(PIPELINE_STAGE_NAMES);
 export type PipelineStageName = z.infer<typeof PipelineStageName>;
+
+// ─── Agents ─────────────────────────────────────────────────────────────────
+// A named agent binds a domain to an ordered set of pipeline stages. The CLI
+// registry attaches the concrete prompts to each descriptor (see
+// packages/cli/src/agents/registry.ts). This is the seam that lets the interface
+// select between agents/domain-kits instead of hardwiring one pipeline.
+export const AgentDescriptor = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  description: z.string().min(1),
+  stages: z.array(PipelineStageName).min(1),
+});
+export type AgentDescriptor = z.infer<typeof AgentDescriptor>;
+
+export const AGENT_CATALOG = z.array(AgentDescriptor).parse([
+  {
+    id: "developer",
+    label: "Developer",
+    description: "Pipeline completo de ingeniería de software: explore → snapshot → plan → run → learn.",
+    stages: ["explore", "snapshot", "plan", "run", "learn"],
+  },
+]);
+
+export const DEFAULT_AGENT_ID = "developer";
 
 export const DecisionStageName = z.enum([
   "explore", "snapshot", "plan", "run", "learn", "evolve", "hitl",
+  "research",
 ]);
 export type DecisionStageName = z.infer<typeof DecisionStageName>;
 
@@ -176,6 +202,138 @@ export const PlanOutput = z.object({
   decisions: z.array(DecisionRecord).default([]),
 });
 export type PlanOutput = z.infer<typeof PlanOutput>;
+
+export const ResearchSourceId = z.string().min(1);
+export type ResearchSourceId = z.infer<typeof ResearchSourceId>;
+
+export const ResearchSourceRange = z.object({
+  startLine: z.number().int().positive(),
+  endLine: z.number().int().positive().optional(),
+}).superRefine((range, ctx) => {
+  if (range.endLine !== undefined && range.endLine < range.startLine) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "endLine must be greater than or equal to startLine",
+      path: ["endLine"],
+    });
+  }
+});
+export type ResearchSourceRange = z.infer<typeof ResearchSourceRange>;
+
+export const ResearchRepoSource = z.object({
+  id: ResearchSourceId,
+  type: z.literal("repo"),
+  title: z.string().min(1).optional(),
+  path: z.string().min(1),
+  range: ResearchSourceRange.optional(),
+  symbol: z.string().min(1).optional(),
+});
+export type ResearchRepoSource = z.infer<typeof ResearchRepoSource>;
+
+export const ResearchWebSource = z.object({
+  id: ResearchSourceId,
+  type: z.literal("web"),
+  title: z.string().min(1).optional(),
+  url: z.string().url(),
+  accessedAt: z.string().datetime().optional(),
+});
+export type ResearchWebSource = z.infer<typeof ResearchWebSource>;
+
+export const ResearchSource = z.discriminatedUnion("type", [
+  ResearchRepoSource,
+  ResearchWebSource,
+]);
+export type ResearchSource = z.infer<typeof ResearchSource>;
+
+export const ResearchFinding = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  citations: z.array(ResearchSourceId).min(1),
+  confidence: z.number().min(0).max(1).optional(),
+});
+export type ResearchFinding = z.infer<typeof ResearchFinding>;
+
+export const ResearchGap = z.object({
+  id: z.string().min(1),
+  description: z.string().min(1),
+  impact: z.string().min(1).optional(),
+  citations: z.array(ResearchSourceId).default([]),
+});
+export type ResearchGap = z.infer<typeof ResearchGap>;
+
+export const ResearchRecommendation = z.object({
+  id: z.string().min(1),
+  recommendation: z.string().min(1),
+  rationale: z.string().min(1).optional(),
+  citations: z.array(ResearchSourceId).default([]),
+});
+export type ResearchRecommendation = z.infer<typeof ResearchRecommendation>;
+
+export const ResearchReportArtifact = z.object({
+  kind: z.literal("research_report").default("research_report"),
+  path: z.string().min(1),
+  format: z.enum(["json", "markdown"]).default("json"),
+  title: z.string().min(1).optional(),
+});
+export type ResearchReportArtifact = z.infer<typeof ResearchReportArtifact>;
+
+export const ResearchOutputMetadata = z.object({
+  stage: z.literal("research").default("research"),
+  artifactKind: z.literal("research_report").default("research_report"),
+  sessionId: z.string().min(1).optional(),
+  taskId: TaskId.optional(),
+  createdAt: z.string().datetime().optional(),
+  persistedAt: z.string().datetime().optional(),
+});
+export type ResearchOutputMetadata = z.infer<typeof ResearchOutputMetadata>;
+
+export const ResearchOutput = z.object({
+  status: z.enum(["completed", "awaiting_human"]).default("completed"),
+  summary: z.string().min(1),
+  scope: z.object({
+    question: z.string().min(1),
+    constraints: z.array(z.string().min(1)).default([]),
+    repoPaths: z.array(z.string().min(1)).default([]),
+    webQueries: z.array(z.string().min(1)).default([]),
+  }),
+  findings: z.array(ResearchFinding).default([]),
+  gaps: z.array(ResearchGap).default([]),
+  recommendations: z.array(ResearchRecommendation).default([]),
+  sources: z.array(ResearchSource).default([]),
+  artifact: ResearchReportArtifact,
+  metadata: ResearchOutputMetadata.default({}),
+  questions: z.array(Question).default([]),
+  decisions: z.array(DecisionRecord).default([]),
+}).superRefine((output, ctx) => {
+  const sourceIds = new Set<ResearchSourceId>();
+
+  for (const [index, source] of output.sources.entries()) {
+    if (sourceIds.has(source.id)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `duplicate source id: ${source.id}`,
+        path: ["sources", index, "id"],
+      });
+      continue;
+    }
+
+    sourceIds.add(source.id);
+  }
+
+  for (const [index, finding] of output.findings.entries()) {
+    for (const [citationIndex, citation] of finding.citations.entries()) {
+      if (!sourceIds.has(citation)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `finding citation references unknown source id: ${citation}`,
+          path: ["findings", index, "citations", citationIndex],
+        });
+      }
+    }
+  }
+});
+export type ResearchOutput = z.infer<typeof ResearchOutput>;
 
 export const RoutingMode = z.enum(["ask", "work", "work-debate"]);
 export type RoutingMode = z.infer<typeof RoutingMode>;
@@ -564,6 +722,30 @@ export const SLASH_COMMAND_CATALOG = SlashCommandCatalog.parse([
     metadata: { cliCommand: "version", uiHandler: "version.show", keywords: ["about"] },
   },
   {
+    id: "model",
+    title: "Model",
+    description: "Configurar el proveedor CLI y modelo por defecto global.",
+    category: "meta",
+    surfaces: ["cli"],
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "model.configure" },
+    aliases: ["modelo"],
+    permission: { permissions: ["workspace:read"], risk: "low" },
+    metadata: { cliCommand: "chat:/model", keywords: ["provider", "agent", "config"] },
+  },
+  {
+    id: "agents",
+    title: "Agents",
+    description: "Listar los agentes disponibles o cambiar el agente activo (ej. /agents use developer).",
+    category: "meta",
+    surfaces: SHARED_SURFACES,
+    args: [],
+    executionIntent: { ...DUAL_MESSAGE_AND_ACTION, localAction: "agents.show" },
+    aliases: ["agent"],
+    permission: { permissions: ["workspace:read"], risk: "low" },
+    metadata: { cliCommand: "agents", uiHandler: "agents.show", keywords: ["agent", "domain", "kit", "pipeline"] },
+  },
+  {
     id: "help",
     title: "Help",
     description: "Mostrar la ayuda de comandos disponibles.",
@@ -784,6 +966,7 @@ export type SladHarnessSettings = z.infer<typeof SladHarnessSettings>;
 
 export const SladSettings = z.object({
   activeProfileId: z.string().optional(),
+  activeAgentId: z.string().default("developer"),
   profiles: z.array(SladProfile).default([]),
   providers: z.object({
     defaultProvider: ProviderName.default("anthropic"),
