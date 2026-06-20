@@ -980,7 +980,7 @@ export const SladSettings = z.object({
   }).default({}),
   harness: SladHarnessSettings.default({}),
   paths: z.object({
-    docsPath: z.string().default("packages/cli/docs"),
+    docsPath: z.string().default("docs"),
     wikiPath: z.string().optional(),
     activeWorkspace: z.string().optional(),
   }).default({}),
