@@ -1,4 +1,5 @@
 export * from "./types.js";
+export * from "./events.js";
 export * from "./stage.js";
 export * from "./runner.js";
 export * from "./session.js";

@@ -139,8 +139,12 @@ describe("parseAction", () => {
       assert.deepEqual(parseAction("/run --auto", null), { type: "run-auto" });
     });
 
-    it('"/auto" → run-auto', () => {
-      assert.deepEqual(parseAction("/auto", null), { type: "run-auto" });
+    it('"/auto" without session → unknown', () => {
+      assert.deepEqual(parseAction("/auto", null), { type: "unknown", input: "/auto" });
+    });
+
+    it('"/auto" with session → auto from session intent', () => {
+      assert.deepEqual(parseAction("/auto", makeSession()), { type: "auto", intent: "test intent" });
     });
 
     it('"/auto crear login" → auto with intent', () => {

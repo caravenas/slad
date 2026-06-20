@@ -9,10 +9,15 @@ import { log } from "../core/logger.js";
 import { createHarness } from "@slad/harness";
 import { loadHarnessConfig } from "../harness/config.js";
 
-import { createHitlTransport } from "@slad/hitl";
+import {
+  autoResolveExplore,
+  autoResolveGeneric,
+  autoResolvePlan,
+  type HITLTransport,
+} from "@slad/hitl";
 import { getActiveAgent } from "../agents/registry.js";
 import { writeArtifact, readArtifact } from "../persistence/index.js";
-import { getOrCreateSession, getActiveSession, appendArtifact, saveSession, lastArtifactPath } from "../core/session.js";
+import { getOrCreateSession, getActiveSession, appendArtifact, saveSession } from "../core/session.js";
 import { appendBudgetHistory } from "@slad/context-budget";
 import { getDocsRoot } from "../persistence/layout.js";
 import { ProviderError } from "../core/errors.js";
@@ -20,6 +25,7 @@ import { classifyIntent } from "../core/classifier.js";
 import { askCommand } from "./ask.js";
 import { appendAgentRunLog } from "../persistence/telemetry.js";
 import { select } from "@inquirer/prompts";
+import type { PlanOutput, Question, RunOutput, SessionState } from "../core/types.js";
 
 export interface AutoOpts {
   provider?: string;
@@ -38,6 +44,295 @@ export interface AutoOpts {
   debate?: boolean;
   debateModels?: string;
   debateThreshold?: number;
+}
+
+const AUTO_STAGE_ORDER = ["explore", "snapshot", "plan", "run", "learn"] as const satisfies readonly SladPipelineStageId[];
+
+type AutoStageOutput = {
+  status?: string;
+  taskId?: string;
+};
+
+type AutoHitlStageId = SladPipelineStageId | "unknown";
+
+type AutoHitlQuestionMetadata = {
+  id: string;
+  prompt: string;
+  kind: string;
+  blocking: boolean;
+  choices?: string[];
+  default?: string;
+  context?: string;
+};
+
+type AutoHitlRequestMetadata = {
+  stage: AutoHitlStageId;
+  taskId?: string;
+  status: "resolved" | "blocked" | "awaiting_human";
+  questions: AutoHitlQuestionMetadata[];
+  answers: Record<string, string>;
+  unresolved: string[];
+  createdAt: string;
+};
+
+export type AutoHitlResolution = {
+  answers: Record<string, string>;
+  unresolved: Question[];
+};
+
+export function isCompleteAutoStageOutput(stage: SladPipelineStageId, output: unknown): boolean {
+  if (stage === "run") {
+    const outputs = Array.isArray(output) ? output : [output];
+    return outputs.length > 0 && outputs.every((item) => isRecord(item) && item.status === "completed");
+  }
+  return isRecord(output) && output.status === "completed";
+}
+
+export function completedRunTaskIds(plan: PlanOutput, outputs: readonly RunOutput[]): Set<string> {
+  const planTaskIds = new Set(plan.tasks.map((task) => task.id));
+  return new Set(
+    outputs
+      .filter((output) => output.status === "completed" && planTaskIds.has(output.taskId))
+      .map((output) => output.taskId),
+  );
+}
+
+export function planPendingRunTasks(plan: PlanOutput, outputs: readonly RunOutput[]): PlanOutput {
+  const completed = completedRunTaskIds(plan, outputs);
+  const pendingTasks = plan.tasks.filter((task) => !completed.has(task.id));
+  const pendingTaskIds = new Set(pendingTasks.map((task) => task.id));
+  const recommendedFirstTask = plan.recommendedFirstTask && pendingTaskIds.has(plan.recommendedFirstTask)
+    ? plan.recommendedFirstTask
+    : pendingTasks[0]?.id;
+
+  return {
+    ...plan,
+    tasks: pendingTasks.map((task) => ({
+      ...task,
+      dependsOn: task.dependsOn.filter((dep) => pendingTaskIds.has(dep)),
+    })),
+    ...(recommendedFirstTask ? { recommendedFirstTask } : {}),
+  };
+}
+
+function isRecord(value: unknown): value is AutoStageOutput & Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+class AutoStageIncompleteError extends Error {
+  constructor(stage: SladPipelineStageId, status: string) {
+    super(
+      `Stage '${stage}' no completó de forma verificable (status: ${status}). `
+        + "El estado previo quedó intacto para reintentar /auto después de resolver el bloqueo.",
+    );
+    this.name = "AutoStageIncompleteError";
+  }
+}
+
+export class AutoHitlBlockedError extends Error {
+  constructor(stage: AutoHitlStageId, questions: readonly Question[]) {
+    super(formatAutoHitlBlockedMessage(stage, questions));
+    this.name = "AutoHitlBlockedError";
+  }
+}
+
+export function resolveAutoHitlQuestions(
+  stage: AutoHitlStageId,
+  questions: readonly Question[],
+): AutoHitlResolution {
+  const output = { status: "awaiting_human", questions: [...questions] };
+  const answers = stage === "explore"
+    ? autoResolveExplore(output)
+    : stage === "plan"
+      ? autoResolvePlan(output)
+      : autoResolveGeneric(output);
+  const unresolved = questions.filter((question) => answers[question.id] === undefined);
+  return { answers, unresolved };
+}
+
+export function formatAutoHitlBlockedMessage(stage: AutoHitlStageId, questions: readonly Question[]): string {
+  const details = questions
+    .map((question) => {
+      const choices = question.choices?.length ? ` choices=${question.choices.join("|")}` : "";
+      const defaultValue = question.default !== undefined ? ` default=${question.default}` : " sin default";
+      return `${question.id} (${question.kind}, ${question.blocking ? "blocking" : "non-blocking"}): ${question.prompt}${choices}${defaultValue}`;
+    })
+    .join("; ");
+  return [
+    `HITL automático bloqueado en '${stage}'.`,
+    "No hay default ni política automática segura para continuar sin intervención humana.",
+    `Preguntas pendientes: ${details || "sin detalle"}.`,
+    "Acción: agregá un default seguro, reducí las opciones a una sola alternativa segura o ejecutá el stage interactivo para responder y luego reintentá /auto.",
+  ].join(" ");
+}
+
+function collectAutoHitlAnswers(
+  stage: AutoHitlStageId,
+  questions: readonly Question[],
+  metadata: AutoHitlRequestMetadata[],
+): Record<string, string> {
+  const { answers, unresolved } = resolveAutoHitlQuestions(stage, questions);
+  metadata.push({
+    stage,
+    status: unresolved.length > 0 ? "blocked" : "resolved",
+    questions: questions.map(serializeQuestion),
+    answers,
+    unresolved: unresolved.map((question) => question.id),
+    createdAt: new Date().toISOString(),
+  });
+  if (unresolved.length > 0) {
+    throw new AutoHitlBlockedError(stage, unresolved);
+  }
+  return answers;
+}
+
+function recordAwaitingHumanMetadata(
+  stage: SladPipelineStageId,
+  output: unknown,
+  metadata: AutoHitlRequestMetadata[],
+): void {
+  for (const item of awaitingHumanItems(output)) {
+    metadata.push({
+      stage,
+      ...(item.taskId ? { taskId: item.taskId } : {}),
+      status: "awaiting_human",
+      questions: item.questions.map(serializeQuestion),
+      answers: {},
+      unresolved: item.questions.map((question) => question.id),
+      createdAt: new Date().toISOString(),
+    });
+  }
+}
+
+function awaitingHumanItems(output: unknown): { taskId?: string; questions: Question[] }[] {
+  const values = Array.isArray(output) ? output : [output];
+  return values.flatMap((value) => {
+    if (!isRecord(value) || value.status !== "awaiting_human") return [];
+    const questions = Array.isArray(value.questions)
+      ? value.questions.filter(isQuestion)
+      : [];
+    if (questions.length === 0) return [];
+    const taskId = typeof value.taskId === "string" ? value.taskId : undefined;
+    return [{ ...(taskId ? { taskId } : {}), questions }];
+  });
+}
+
+function isQuestion(value: unknown): value is Question {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.prompt === "string"
+    && typeof value.kind === "string";
+}
+
+function serializeQuestion(question: Question): AutoHitlQuestionMetadata {
+  return {
+    id: question.id,
+    prompt: question.prompt,
+    kind: question.kind,
+    blocking: question.blocking,
+    ...(question.choices ? { choices: [...question.choices] } : {}),
+    ...(question.default !== undefined ? { default: question.default } : {}),
+    ...(question.context ? { context: question.context } : {}),
+  };
+}
+
+function outputStatus(output: unknown): string {
+  if (Array.isArray(output)) {
+    const statuses = output.map((item) => isRecord(item) ? String(item.status ?? "unknown") : "unknown");
+    return statuses.length ? statuses.join(",") : "empty";
+  }
+  return isRecord(output) ? String(output.status ?? "unknown") : "unknown";
+}
+
+async function readLatestCompleteStageArtifact(
+  session: SessionState,
+  stage: Exclude<SladPipelineStageId, "run">,
+): Promise<unknown | undefined> {
+  const refs = [...session.artifacts].reverse().filter((artifact) => artifact.kind === stage);
+  for (const ref of refs) {
+    try {
+      const { value } = await readArtifact(stage, ref.path);
+      if (isCompleteAutoStageOutput(stage, value)) return value;
+    } catch {
+      // Ignore stale or invalid artifacts and continue toward the last reliable state.
+    }
+  }
+  return undefined;
+}
+
+async function readCompleteRunOutputs(session: SessionState): Promise<RunOutput[]> {
+  const outputs: RunOutput[] = [];
+  const seen = new Set<string>();
+  const refs = [...session.artifacts].reverse().filter((artifact) => artifact.kind === "run");
+
+  for (const ref of refs) {
+    try {
+      const { value } = await readArtifact("run", ref.path);
+      const values = Array.isArray(value) ? value : [value];
+      for (const output of values) {
+        if (output.status !== "completed" || seen.has(output.taskId)) continue;
+        seen.add(output.taskId);
+        outputs.push(output);
+      }
+    } catch {
+      // Invalid run artifacts are not a reliable resume point.
+    }
+  }
+
+  return outputs.reverse();
+}
+
+async function resolveAutoResume(
+  session: SessionState | null,
+  stages: readonly SladPipelineStageId[],
+  intent: string,
+): Promise<{ stages: SladPipelineStageId[]; input: unknown; note?: string }> {
+  if (!session) return { stages: [...stages], input: { intent } };
+
+  const targetStages = stages.filter((stage) => AUTO_STAGE_ORDER.includes(stage));
+  const hasTarget = (stage: SladPipelineStageId) => targetStages.includes(stage);
+  const firstTargetAt = (stage: SladPipelineStageId) => {
+    const index = targetStages.indexOf(stage);
+    return index === -1 ? [] : targetStages.slice(index);
+  };
+
+  const snapshot = await readLatestCompleteStageArtifact(session, "snapshot");
+  const plan = snapshot ? await readLatestCompleteStageArtifact(session, "plan") as PlanOutput | undefined : undefined;
+  if (snapshot && plan) {
+    const runOutputs = await readCompleteRunOutputs(session);
+    const completedTasks = completedRunTaskIds(plan, runOutputs);
+    const allPlanTasksCompleted = plan.tasks.length > 0 && plan.tasks.every((task) => completedTasks.has(task.id));
+
+    if (allPlanTasksCompleted) {
+      const learn = await readLatestCompleteStageArtifact(session, "learn");
+      if (learn || !hasTarget("learn")) {
+        return { stages: [], input: learn ?? runOutputs, note: "pipeline ya estaba completo" };
+      }
+      return { stages: firstTargetAt("learn"), input: runOutputs, note: "retomando desde learn" };
+    }
+
+    if (hasTarget("run")) {
+      const pendingPlan = planPendingRunTasks(plan, runOutputs);
+      return {
+        stages: firstTargetAt("run"),
+        input: pendingPlan,
+        note: completedTasks.size > 0
+          ? `retomando run con ${pendingPlan.tasks.length} tarea(s) pendiente(s)`
+          : "retomando desde run",
+      };
+    }
+  }
+
+  if (snapshot && hasTarget("plan")) {
+    return { stages: firstTargetAt("plan"), input: snapshot, note: "retomando desde plan" };
+  }
+
+  const explore = await readLatestCompleteStageArtifact(session, "explore");
+  if (explore && hasTarget("snapshot")) {
+    return { stages: firstTargetAt("snapshot"), input: explore, note: "retomando desde snapshot" };
+  }
+
+  return { stages: [...targetStages], input: { intent } };
 }
 
 export async function autoCommand(intent: string, opts: AutoOpts): Promise<void> {
@@ -130,7 +425,6 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   if (opts.maxCost !== undefined) log.dim(`  budget: $${opts.maxCost}`);
   console.log("");
 
-  const _hitl = createHitlTransport("tty");
   const harnessConfig = loadHarnessConfig(opts.harness ?? "on");
   const harness = harnessConfig.mode === "off"
     ? undefined
@@ -138,21 +432,17 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
 
   let spinner = ora("Iniciando pipeline...").start();
 
-  // Pause spinner while HITL prompts are active to avoid visual conflicts
-  const hitl = {
-    kind: _hitl.kind,
-    canPrompt: () => _hitl.canPrompt(),
-    canInteract: () => _hitl.canInteract(),
-    askQuestion: (q: Parameters<typeof _hitl.askQuestion>[0]) => _hitl.askQuestion(q),
-    printHeader: _hitl.printHeader?.bind(_hitl),
-    printPaused: _hitl.printPaused?.bind(_hitl),
-    collectAnswers: async (questions: Parameters<typeof _hitl.collectAnswers>[0]) => {
-      const prevText = spinner.text;
-      if (spinner.isSpinning) spinner.stop();
-      const answers = await _hitl.collectAnswers(questions);
-      spinner = ora(prevText).start();
-      return answers;
+  let currentStage: AutoHitlStageId = "unknown";
+  const hitlMetadata: AutoHitlRequestMetadata[] = [];
+  const hitl: HITLTransport = {
+    kind: "tty",
+    canPrompt: () => true,
+    canInteract: () => false,
+    askQuestion: async (question) => {
+      const answers = collectAutoHitlAnswers(currentStage, [question], hitlMetadata);
+      return answers[question.id] ?? "";
     },
+    collectAnswers: async (questions) => collectAutoHitlAnswers(currentStage, questions, hitlMetadata),
   };
 
   let totalInputTokens = 0;
@@ -167,42 +457,14 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   let pipelineStages = activeAgent.descriptor.stages.filter(
     (stage): stage is SladPipelineStageId => stage !== "evolve" && !dropStages.has(stage as SladPipelineStageId),
   );
-  let resumeInput: unknown = undefined;
   let existingSession = opts.fresh ? null : getActiveSession();
-
-  // Resume: if there's an active session with artifacts, offer to skip completed stages.
-  if (existingSession) {
-    const completedStages = pipelineStages.filter(stage =>
-      existingSession!.artifacts.some(a => a.kind === stage),
-    );
-    const remainingStages = pipelineStages.filter(s => !completedStages.includes(s));
-    const lastStage = completedStages[completedStages.length - 1];
-    const nextStage = remainingStages[0];
-
-    if (lastStage && nextStage) {
-      spinner.stop();
-      const doResume = await select({
-        message: `Sesión con stages completados (${completedStages.join(", ")}). ¿Retomar desde ${nextStage}?`,
-        choices: [
-          { name: `Retomar desde ${nextStage}`, value: true },
-          { name: "Empezar de nuevo (desde explore)", value: false },
-        ],
-      });
-      if (doResume) {
-        const artifactPath = lastArtifactPath(existingSession!, lastStage as any);
-        if (artifactPath) {
-          const { value } = await readArtifact(lastStage as any, artifactPath);
-          resumeInput = value;
-          pipelineStages = remainingStages;
-        }
-      } else {
-        existingSession = null;
-      }
-      spinner = ora("Iniciando pipeline...").start();
-    }
-  }
-
   let activeSession = existingSession ?? getOrCreateSession(intent);
+  const resume = await resolveAutoResume(existingSession, pipelineStages, intent);
+  pipelineStages = resume.stages;
+  const resumeInput = resume.input;
+  if (resume.note) {
+    spinner.text = resume.note;
+  }
 
   const pipeline = buildSladPipeline({
     stages: pipelineStages,
@@ -235,14 +497,30 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
     resumeInput ?? { intent },
     {
       onStageStart: (stage: string) => {
+        currentStage = AUTO_STAGE_ORDER.includes(stage as SladPipelineStageId)
+          ? stage as SladPipelineStageId
+          : "unknown";
         if (spinner.isSpinning) spinner.stop();
         spinner = ora(kleur.dim(`${stage}...`)).start();
       },
       onArtifact: async (stage: string, artifact: unknown) => {
-        if (stage !== "run") {
-          const ref = await writeArtifact(stage as any, artifact as any, { sessionId: activeSession!.id });
-          activeSession = appendArtifact(activeSession!, stage as any, ref.path);
+        const stageId = stage as SladPipelineStageId;
+        if (stageId === "run") {
+          const outputs = Array.isArray(artifact) ? (artifact as RunOutput[]) : [artifact as RunOutput];
+          for (const output of outputs) {
+            const ref = await writeArtifact("run", output, { sessionId: activeSession!.id });
+            activeSession = appendArtifact(activeSession!, "run", ref.path, output.taskId);
+            saveSession(activeSession);
+          }
+        } else {
+          const ref = await writeArtifact(stageId as any, artifact as any, { sessionId: activeSession!.id });
+          activeSession = appendArtifact(activeSession!, stageId as any, ref.path);
           saveSession(activeSession);
+        }
+
+        if (!isCompleteAutoStageOutput(stageId, artifact)) {
+          recordAwaitingHumanMetadata(stageId, artifact, hitlMetadata);
+          throw new AutoStageIncompleteError(stageId, outputStatus(artifact));
         }
       },
       onStageComplete: (stage: string) => {
@@ -271,7 +549,13 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   const stagesCompleted = result.stages.filter((s) => s.status === "completed").map((s) => s.stageId);
 
   const docsRoot = await getDocsRoot();
-  writeAutoReport({ status: result.status, outputs }, { docsRoot, basename: "auto" });
+  writeAutoReport({
+    status: result.status,
+    outputs,
+    metadata: {
+      hitl: hitlMetadata,
+    },
+  }, { docsRoot, basename: "auto" });
 
   appendBudgetHistory({
     sessionId: activeSession!.id,

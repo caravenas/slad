@@ -18,6 +18,7 @@ import {
 } from "./commands/session.js";
 import { askCommand } from "./commands/ask.js";
 import { chatCommand } from "./commands/chat.js";
+import { createCommand, listBlueprints, CREATE_KINDS } from "./commands/create.js";
 import { log } from "./core/logger.js";
 import { SladError } from "./core/errors.js";
 import { getFormattedCliVersion } from "./cli/version.js";
@@ -29,32 +30,37 @@ const program = new Command();
 
 program
   .name("slad")
-  .description("SLAD OS — CLI de agentes para explorar intención y generar Snapshots.")
+  .description("SLAD — Agent Construction Kit. Construí agentes, tools, stages y pipelines.")
   .version(cliVersion)
   .addHelpText(
     "after",
     `
-Respuesta rápida (sin pipeline):
+Crear (scaffolding desde blueprints del SDK):
+
+  $ slad create agent miagente                 # proyecto de agente mínimo
+  $ slad create agent miagente --template enterprise   # estructura completa
+  $ slad create tool fetch-issues              # un tool tipado
+  $ slad create stage summarize                # una stage LLM
+  $ slad create pipeline review                # un pipeline secuencial
+  $ slad create --list                         # ver blueprints y templates
+
+Usar el modelo (sin proyecto):
 
   $ slad ask "¿qué es Zod y cuándo usarlo?"
-  $ slad ask "explícame el patrón Result en TypeScript" --save
+  $ slad chat                                  # REPL conversacional
 
-Pipeline completo:
+Configuración y estado:
 
-  $ slad auto "agregar autenticación"
-  $ slad auto "agregar autenticación" --dry-run    # solo explore+snapshot+plan
-  $ slad auto "agregar autenticación" --skip-learn  # sin retrospectiva
+  $ slad model                                 # provider/modelo por defecto
+  $ slad stats                                 # métricas del proyecto
 
-Pipeline por stages:
+Pipeline runtime (avanzado):
 
-  $ slad session start "agregar autenticación"
-  $ slad explore "agregar autenticación"
-  $ slad snapshot && slad plan && slad run T1
-  $ slad learn && slad evolve
+  $ slad pipeline auto "agregar autenticación" # explore→snapshot→plan→run→learn
+  $ slad pipeline --help                       # stages, sesiones y personas
 
-Modo conversacional:
-
-  $ slad chat
+  Todo el flujo legacy (explore/snapshot/plan/run/learn/evolve, sesiones y la
+  persona "developer") vive bajo  slad pipeline …
 `,
   );
 
@@ -81,6 +87,73 @@ program
   });
 
 program
+  .command("create")
+  .description("Genera un agente, tool, stage, pipeline o app desde un blueprint del SDK.")
+  .argument("[kind]", `Qué generar: ${CREATE_KINDS.join(" | ")}`)
+  .argument("[name]", "Nombre del artefacto a generar")
+  .option("-t, --template <id>", "Blueprint a usar (ej. basic-agent | enterprise | shell-tool)")
+  .option("-l, --list", "Lista los blueprints y templates disponibles")
+  .addHelpText(
+    "after",
+    `
+Ejemplos:
+
+  $ slad create agent demo                    # proyecto mínimo (3-4 carpetas)
+  $ slad create agent demo --template enterprise   # estructura completa (§8)
+  $ slad create tool fetch-issues             # un tool tipado en el cwd
+  $ slad create stage summarize               # una stage LLM en el cwd
+  $ slad create pipeline review               # un pipeline secuencial en el cwd
+  $ slad create --list                        # ver blueprints y templates
+`,
+  )
+  .action(
+    async (
+      kind: string | undefined,
+      name: string | undefined,
+      opts: { template?: string; list?: boolean },
+    ) => {
+      if (opts.list) {
+        listBlueprints();
+        return;
+      }
+      if (!kind || !name) {
+        throw new SladError(
+          `Uso: slad create <${CREATE_KINDS.join("|")}> <name> [--template <id>]  ·  o: slad create --list`,
+          "CREATE_USAGE",
+        );
+      }
+      await createCommand(kind, name, { template: opts.template });
+    },
+  );
+
+// ─── Pipeline namespace (legacy SLAD-OS runtime) ───────────────────────────────
+// The explore→snapshot→plan→run→learn→evolve flow, its sessions and personas all
+// live under `slad pipeline …`, keeping the top level focused on the Agent Kit.
+const pipelineCmd = program
+  .command("pipeline")
+  .description("Runtime del pipeline (legacy): explore → snapshot → plan → run → learn → evolve.")
+  .addHelpText(
+    "after",
+    `
+Flujo completo:
+
+  $ slad pipeline auto "agregar autenticación"        # explore→…→learn de una
+  $ slad pipeline session start "agregar autenticación"
+
+Por stages:
+
+  $ slad pipeline explore "agregar autenticación"
+  $ slad pipeline snapshot && slad pipeline plan && slad pipeline run T1
+  $ slad pipeline learn && slad pipeline evolve
+
+Personas del pipeline:
+
+  $ slad pipeline agents                               # lista personas (ej. developer)
+  $ slad pipeline agents use developer
+`,
+  );
+
+pipelineCmd
   .command("explore")
   .description("Explorer Agent: analiza una intención y devuelve enfoques, riesgos y next steps.")
   .argument("<intent...>", "La intención a explorar (entre comillas o libre)")
@@ -95,7 +168,7 @@ program
     await exploreCommand(intent, opts);
   });
 
-program
+pipelineCmd
   .command("snapshot")
   .description("Genera un Snapshot (mini-spec) a partir de un explore.json o de una intención.")
   .option("-i, --input <path>", "Ruta a un explore.json (output de `slad explore --output`)")
@@ -110,7 +183,7 @@ program
     await snapshotCommand(opts);
   });
 
-program
+pipelineCmd
   .command("plan")
   .description("Planner Agent: convierte un Snapshot en tasks.json ejecutable.")
   .option("-i, --input <path>", "Ruta a un snapshot.md (default: último snapshot de la sesión activa)")
@@ -124,7 +197,7 @@ program
     await planCommand(opts);
   });
 
-program
+pipelineCmd
   .command("run")
   .description("Builder + Reviewer: ejecuta una tarea de tasks.json y guarda un reporte.")
   .argument("[task]", "Task id a ejecutar (ej. T2). Alternativa a --task")
@@ -149,7 +222,7 @@ program
     await runCommand({ ...opts, task: taskArg ?? opts.task });
   });
 
-program
+pipelineCmd
   .command("learn")
   .description("Learn Agent: captura decisiones, errores y patrones desde un run report.")
   .option("-i, --input <path>", "Ruta a un run report .md o JSON legacy (default: último run persistido)")
@@ -163,7 +236,7 @@ program
     await learnCommand(opts);
   });
 
-program
+pipelineCmd
   .command("evolve")
   .description("Evolve Agent: propone actualizaciones de wiki/patrones desde artefactos recientes.")
   .option("-a, --agent <name>", "Agente local (codex | claude | gemini)")
@@ -232,7 +305,7 @@ const AUTO_OPTIONS = (cmd: import("commander").Command) =>
     .option("--no-classify", "Saltar el clasificador automático de intención (Haiku)");
 
 AUTO_OPTIONS(
-  program
+  pipelineCmd
     .command("work")
     .description("Pipeline completo: explore → snapshot → plan → run → learn.")
     .argument("<intent...>", "La intención a implementar"),
@@ -241,7 +314,7 @@ AUTO_OPTIONS(
 });
 
 AUTO_OPTIONS(
-  program
+  pipelineCmd
     .command("auto")
     .description("[alias de work] Pipeline completo.")
     .argument("<intent...>", "La intención a implementar"),
@@ -271,9 +344,9 @@ program
     await chatCommand(opts);
   });
 
-const sessionCmd = program
+const sessionCmd = pipelineCmd
   .command("session")
-  .description("Gestiona sesiones de trabajo: contexto compartido entre comandos.");
+  .description("Gestiona sesiones de trabajo: contexto compartido entre stages del pipeline.");
 
 sessionCmd
   .command("start <intent...>")
@@ -304,16 +377,16 @@ sessionCmd
     await sessionShowCommand();
   });
 
-const agentsCmd = program
+const agentsCmd = pipelineCmd
   .command("agents")
-  .description("Lista los agentes disponibles y muestra el activo.")
+  .description("Lista las personas del pipeline (prompt sets) y muestra la activa.")
   .action(() => {
     agentsListCommand();
   });
 
 agentsCmd
   .command("use <id>")
-  .description("Cambia el agente activo (ej. slad agents use developer).")
+  .description("Cambia la persona activa del pipeline (ej. slad pipeline agents use developer).")
   .action((id: string) => {
     agentsUseCommand(id);
   });
@@ -323,6 +396,29 @@ agentsCmd
 // any positional token that matches a known subcommand.
 const knownCommands = new Set(program.commands.map((c) => c.name()));
 const userArgs = process.argv.slice(2);
+
+// Commands that moved under the `pipeline` namespace. If invoked at the top level,
+// guide the user instead of silently opening chat.
+const MOVED_TO_PIPELINE = new Set([
+  "explore",
+  "snapshot",
+  "plan",
+  "run",
+  "learn",
+  "evolve",
+  "work",
+  "auto",
+  "session",
+  "agents",
+]);
+const firstPositional = userArgs.find((a) => !a.startsWith("-"));
+if (firstPositional && MOVED_TO_PIPELINE.has(firstPositional)) {
+  log.error(
+    `"${firstPositional}" ahora vive bajo el namespace pipeline. Usá: slad pipeline ${userArgs.join(" ")}`,
+  );
+  process.exit(1);
+}
+
 const hasSubcommand = userArgs.some((a) => knownCommands.has(a));
 const hasRootProgramFlag = userArgs.some((a) => ["--version", "-V", "--help", "-h"].includes(a));
 

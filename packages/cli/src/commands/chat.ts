@@ -18,7 +18,9 @@ import { planCommand } from "./plan.js";
 import { runCommand } from "./run.js";
 import { learnCommand } from "./learn.js";
 import { evolveCommand } from "./evolve.js";
+import { renderSlashCommandSignature } from "@slad/shared";
 import { autoCommand } from "./auto.js";
+import { createCommand, listBlueprints } from "./create.js";
 import { modelCommand } from "./model.js";
 import { statsCommand } from "./stats.js";
 import { selectAgentInteractive } from "./agents.js";
@@ -29,17 +31,26 @@ import { makeHeader } from "../cli/ui.js";
 import { getFormattedCliVersion } from "../cli/version.js";
 import { runSetupIfNeeded } from "../core/setup.js";
 import {
+  buildCliSlashCommandInsertion,
   findCliSlashCommand,
   getVisibleCliSlashCommands,
   openCliSlashCommandPalette,
   resolveCliSlashCommand,
   resolveCliSlashInput,
+  searchAvailableCliSlashCommands,
   type CliSlashLocalAction,
 } from "./slash.js";
+import {
+  buildPromptFrame,
+  clampSelection,
+  renderSubmittedLine,
+  type PromptSlashItem,
+} from "./chat-prompt.js";
 
-const CHAT_SYSTEM = `Eres un asistente técnico experto en desarrollo de software.
+const CHAT_SYSTEM = `Eres un asistente técnico experto en construir agentes con SLAD (un Agent Construction Kit).
 Responde de forma directa, concisa y útil en el idioma del usuario.
-Si el usuario quiere implementar algo concreto, sugerile usar /auto "<intención>" para ejecutar el pipeline completo.`;
+Si el usuario quiere construir un agente, tool, stage o pipeline, sugerile /create <kind> <nombre> (ej. /create agent miagente).
+Si quiere implementar una feature de software end-to-end, sugerile /auto "<intención>" para ejecutar el pipeline completo.`;
 
 /**
  * Reference to the real process.exit captured at module load.
@@ -88,6 +99,17 @@ export function parseAction(raw: string, _session: SessionState | null): ChatAct
     if (command) {
       if (command.id === "run" && /^T\d+$/i.test(tail)) return { type: "run-task", taskId: tail.toUpperCase() };
       if (command.id === "run" && /^(--auto|auto|todo)$/i.test(tail)) return { type: "run-auto" };
+      if (command.id === "create") {
+        if (!tail || /^(--list|-l|list)$/i.test(tail)) return { type: "create-list" };
+        const parts = tail.split(/\s+/);
+        const kind = parts[0];
+        const name = parts[1];
+        let template: string | undefined;
+        const tIdx = parts.findIndex((p) => p === "--template" || p === "-t");
+        if (tIdx !== -1) template = parts[tIdx + 1];
+        if (kind && name) return { type: "create", kind, name, template };
+        return { type: "unknown", input: trimmed };
+      }
       if (command.id === "auto" && tail) return { type: "auto", intent: tail };
       if (command.id === "work-debate" && tail) return { type: "auto-debate", intent: tail };
       if (command.id === "explore" && tail) return { type: "explore", intent: tail };
@@ -113,9 +135,11 @@ export function parseAction(raw: string, _session: SessionState | null): ChatAct
 export function suggestNext(session: SessionState | null): string {
   if (!session || !hasArtifact(session, "explore")) {
     return (
-      kleur.dim("Escribe cualquier cosa para chatear, o usa ") +
+      kleur.dim("Construí con ") +
+      kleur.cyan("/create agent <nombre>") +
+      kleur.dim(", escribí para chatear, o ") +
       kleur.cyan("/auto \"<intención>\"") +
-      kleur.dim(" para ejecutar el pipeline completo.")
+      kleur.dim(" para el pipeline.")
     );
   }
   if (!hasArtifact(session, "snapshot")) return kleur.dim("Pipeline → ") + kleur.cyan("/snapshot");
@@ -166,11 +190,21 @@ export async function maybeOpenSlashPalette(
   return { opened: true, insertion: await openPalette("", session) };
 }
 
+/** Inline slash-command suggestions for the current input (empty if not in slash mode). */
+function computeSlashSuggestions(value: string, session: SessionState | null): PromptSlashItem[] {
+  if (!value.startsWith("/") || value.includes(" ")) return [];
+  return searchAvailableCliSlashCommands(value, session).map((command) => ({
+    insertion: buildCliSlashCommandInsertion(command),
+    signature: renderSlashCommandSignature(command),
+    description: command.description,
+    hasArgs: command.args.length > 0,
+  }));
+}
+
 async function readChatPrompt(
   defaultValue: string | undefined,
   session: SessionState | null,
   agentLabel?: string,
-  openPalette: typeof openCliSlashCommandPalette = openCliSlashCommandPalette,
   inputStream: ChatInputStream = process.stdin,
   outputStream: ChatOutputStream = process.stdout,
 ): Promise<ChatInputPromptResult> {
@@ -184,9 +218,12 @@ async function readChatPrompt(
     return { type: "input", value };
   }
 
-  const prompt = `${indicator} `;
   let value = defaultValue ?? "";
+  let selected = 0;
+  let slashClosed = false;
+  let suggestions: PromptSlashItem[] = [];
   const wasRaw = inputStream.isRaw ?? false;
+  let painted = false;
 
   return new Promise<ChatInputPromptResult>((resolve, reject) => {
     let settled = false;
@@ -210,79 +247,139 @@ async function readChatPrompt(
       reject(err);
     };
 
-    const render = (): void => {
-      readline.clearLine(outputStream, 0);
-      readline.cursorTo(outputStream, 0);
-      outputStream.write(prompt + value);
+    const recompute = (): void => {
+      suggestions = slashClosed ? [] : computeSlashSuggestions(value, session);
+      selected = clampSelection(selected, suggestions.length);
     };
 
-    const openSlashPalette = async (): Promise<void> => {
-      cleanup();
-      outputStream.write("/\n");
-      try {
-        const insertion = await openPalette("", session);
-        resolve({ type: "palette", insertion });
-      } catch {
-        resolve({ type: "palette", insertion: null });
+    // Draw the boxed frame and leave the cursor on the input line. The input
+    // line is always frame line index 1, so a repaint just moves up to the top
+    // rule, clears to end of screen, and redraws everything.
+    const paint = (): void => {
+      const frame = buildPromptFrame({
+        value,
+        promptPrefix: indicator,
+        width: outputStream.columns ?? 80,
+        suggestions,
+        selected,
+      });
+      if (painted) {
+        readline.moveCursor(outputStream, 0, -frame.inputLineIndex);
+        readline.cursorTo(outputStream, 0);
+        outputStream.write("\x1b[0J");
       }
+      outputStream.write(frame.lines.join("\n"));
+      const lastIndex = frame.lines.length - 1;
+      readline.moveCursor(outputStream, 0, -(lastIndex - frame.inputLineIndex));
+      readline.cursorTo(outputStream, frame.cursorCol);
+      painted = true;
+    };
+
+    // Remove the whole frame (cursor is on the input line → go up to the top rule).
+    const clearFrame = (): void => {
+      readline.moveCursor(outputStream, 0, -1);
+      readline.cursorTo(outputStream, 0);
+      outputStream.write("\x1b[0J");
+    };
+
+    const submit = (): void => {
+      clearFrame();
+      const line = renderSubmittedLine(value);
+      if (line) outputStream.write(`${line}\n`);
+      settle({ type: "input", value });
     };
 
     const onKeypress = (sequence: string | undefined, key: KeypressInfo = {}): void => {
       if (settled) return;
 
       if (key.ctrl && key.name === "c") {
+        clearFrame();
         outputStream.write("\n");
         fail(new Error("SIGINT"));
         return;
       }
 
       if (key.name === "return" || key.name === "enter") {
-        outputStream.write("\n");
-        settle({ type: "input", value });
+        // In slash mode, Enter applies the highlighted command first.
+        if (suggestions.length > 0 && value.startsWith("/") && !value.includes(" ")) {
+          const pick = suggestions[selected];
+          if (pick) {
+            value = pick.insertion;
+            if (pick.hasArgs) {
+              slashClosed = false;
+              recompute();
+              paint();
+              return;
+            }
+            value = value.trim();
+          }
+        }
+        submit();
         return;
       }
 
-      if (shouldOpenSlashPaletteImmediately(value, sequence, key)) {
-        settled = true;
-        void openSlashPalette();
+      if (key.name === "tab") {
+        if (suggestions.length > 0) {
+          const pick = suggestions[selected];
+          if (pick) {
+            value = pick.insertion;
+            slashClosed = false;
+            recompute();
+            paint();
+          }
+        }
+        return;
+      }
+
+      if (key.name === "escape") {
+        if (suggestions.length > 0) {
+          slashClosed = true;
+          recompute();
+          paint();
+        }
+        return;
+      }
+
+      if ((key.name === "up" || key.name === "down") && suggestions.length > 0) {
+        selected = clampSelection(selected + (key.name === "down" ? 1 : -1), suggestions.length);
+        paint();
         return;
       }
 
       if (key.name === "backspace" || key.name === "delete") {
         value = value.slice(0, -1);
-        render();
+        slashClosed = false;
+        recompute();
+        paint();
         return;
       }
 
       if (key.ctrl && key.name === "u") {
         value = "";
-        render();
+        slashClosed = false;
+        recompute();
+        paint();
         return;
       }
 
-      if (
-        !sequence ||
-        key.ctrl ||
-        key.meta ||
-        key.name === "up" ||
-        key.name === "down" ||
-        key.name === "left" ||
-        key.name === "right"
-      ) {
+      if (!sequence || key.ctrl || key.meta || key.name === "left" || key.name === "right") {
         return;
       }
 
       const printable = [...sequence].filter((char) => char >= " " && char !== "\x7f").join("");
       if (!printable) return;
       value += printable;
-      render();
+      slashClosed = false;
+      recompute();
+      paint();
     };
 
+    recompute();
     readline.emitKeypressEvents(inputStream);
     inputStream.setRawMode(true);
     inputStream.resume();
     inputStream.on("keypress", onKeypress);
-    outputStream.write(prompt + value);
+    paint();
   });
 }
 
@@ -310,18 +407,34 @@ export async function safeCall(fn: () => Promise<void>): Promise<boolean> {
 
 // ─── help ─────────────────────────────────────────────────────────────────────
 
+const HELP_CATEGORY_ORDER = ["kit", "chat", "pipeline", "session", "observability", "meta"] as const;
+const HELP_CATEGORY_LABELS: Record<string, string> = {
+  kit: "Construir (Agent Kit)",
+  chat: "Conversación",
+  pipeline: "Pipeline (avanzado)",
+  session: "Sesión",
+  observability: "Observabilidad",
+  meta: "Meta",
+};
+
 function printHelp(): void {
-  const w = 22;
-  const cmds: [string, string][] = [
-    ["<mensaje>", "Chat directo con el modelo (modo por defecto)"],
-    ...getVisibleCliSlashCommands().map((command): [string, string] => [`/${command.id}`, command.description]),
-  ];
+  const w = 26;
+  const commands = getVisibleCliSlashCommands();
   console.log("");
   console.log(kleur.bold("  Comandos disponibles:"));
   console.log("");
-  cmds.forEach(([cmd, desc]) => {
-    console.log("  " + kleur.cyan(cmd.padEnd(w)) + kleur.dim(desc));
-  });
+  console.log("  " + kleur.cyan("<mensaje>".padEnd(w)) + kleur.dim("Chat directo con el modelo (modo por defecto)"));
+
+  for (const category of HELP_CATEGORY_ORDER) {
+    const inCategory = commands.filter((command) => command.category === category);
+    if (inCategory.length === 0) continue;
+    console.log("");
+    console.log("  " + kleur.bold(HELP_CATEGORY_LABELS[category] ?? category));
+    for (const command of inCategory) {
+      const signature = renderSlashCommandSignature(command);
+      console.log("  " + kleur.cyan(signature.padEnd(w)) + kleur.dim(command.description));
+    }
+  }
   console.log(kleur.dim("\n  Escribe / para abrir la lista filtrable de comandos."));
 }
 
@@ -496,6 +609,22 @@ async function executeAction(
       );
       break;
 
+    case "create":
+      try {
+        await createCommand(action.kind, action.name, { template: action.template });
+      } catch (err) {
+        log.error((err as Error).message);
+      }
+      break;
+
+    case "create-list":
+      try {
+        listBlueprints();
+      } catch (err) {
+        log.error((err as Error).message);
+      }
+      break;
+
     case "status":
       await sessionShowCommand();
       break;
@@ -604,8 +733,16 @@ export async function chatCommand(opts: ChatOpts): Promise<void> {
       continue;
     }
 
-    const slashResult =
-      trimmedInput !== "/" && trimmedInput.startsWith("/") ? resolveCliSlashInput(userInput, session) : null;
+    let slashResult: ReturnType<typeof resolveCliSlashInput> = null;
+    if (trimmedInput !== "/" && trimmedInput.startsWith("/")) {
+      try {
+        slashResult = resolveCliSlashInput(userInput, session);
+      } catch {
+        // Commands with args (e.g. /create) can't resolve from the palette without
+        // their arguments — fall through to parseAction, which parses them inline.
+        slashResult = null;
+      }
+    }
     const resolvedSlash = slashResult;
 
     // /chat leaves agent mode and returns to the conversational model.

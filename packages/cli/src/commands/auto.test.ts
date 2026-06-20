@@ -9,6 +9,15 @@ import {
   getAutoPipelineStatus,
   stageArtifactDirName,
 } from "@slad/pipeline";
+import {
+  AutoHitlBlockedError,
+  completedRunTaskIds,
+  formatAutoHitlBlockedMessage,
+  isCompleteAutoStageOutput,
+  planPendingRunTasks,
+  resolveAutoHitlQuestions,
+} from "./auto.js";
+import type { PlanOutput, Question, RunOutput } from "../core/types.js";
 
 /**
  * Tests para el comando auto.
@@ -59,6 +68,169 @@ describe("auto helpers", () => {
     const resumed = createAutoPipelineProgress(afterExplore.checkpoint);
     assert.deepEqual(resumed.stagesCompleted, ["explore"]);
     assert.deepEqual(resumed.artifacts, { explore: "/tmp/explore.json" });
+  });
+
+  it("isCompleteAutoStageOutput valida completitud verificable por stage", () => {
+    assert.equal(isCompleteAutoStageOutput("snapshot", { status: "completed" }), true);
+    assert.equal(isCompleteAutoStageOutput("snapshot", { status: "awaiting_human" }), false);
+    assert.equal(isCompleteAutoStageOutput("run", [{ taskId: "T1", status: "completed" }]), true);
+    assert.equal(
+      isCompleteAutoStageOutput("run", [
+        { taskId: "T1", status: "completed" },
+        { taskId: "T2", status: "failed" },
+      ]),
+      false,
+    );
+  });
+
+  it("planPendingRunTasks conserva solo tareas pendientes y dependencias pendientes", () => {
+    const plan: PlanOutput = {
+      status: "completed",
+      snapshot: "test",
+      summary: "Plan de prueba",
+      tasks: [
+        {
+          id: "T1",
+          title: "Base",
+          description: "Completar base",
+          type: "implementation",
+          priority: "high",
+          dependsOn: [],
+          files: ["src/base.ts"],
+          acceptanceCriteria: ["T1 completa"],
+        },
+        {
+          id: "T2",
+          title: "Feature",
+          description: "Completar feature",
+          type: "implementation",
+          priority: "high",
+          dependsOn: ["T1"],
+          files: ["src/feature.ts"],
+          acceptanceCriteria: ["T2 completa"],
+        },
+        {
+          id: "T3",
+          title: "Review",
+          description: "Revisar feature",
+          type: "review",
+          priority: "medium",
+          dependsOn: ["T2"],
+          files: ["src/feature.ts"],
+          acceptanceCriteria: ["Review completa"],
+        },
+      ],
+      verification: [],
+      risks: [],
+      openQuestions: [],
+      recommendedFirstTask: "T1",
+      questions: [],
+      decisions: [],
+    };
+    const runs: RunOutput[] = [
+      {
+        taskId: "T1",
+        status: "completed",
+        summary: "T1 ok",
+        changedFiles: ["src/base.ts"],
+        verification: [],
+        reviewerNotes: [],
+        followUps: [],
+        decisions: [],
+        questions: [],
+        humanAnswers: {},
+      },
+      {
+        taskId: "T2",
+        status: "failed",
+        summary: "T2 falla",
+        changedFiles: [],
+        verification: [],
+        reviewerNotes: [],
+        followUps: [],
+        decisions: [],
+        questions: [],
+        humanAnswers: {},
+      },
+    ];
+
+    assert.deepEqual([...completedRunTaskIds(plan, runs)], ["T1"]);
+    const pending = planPendingRunTasks(plan, runs);
+
+    assert.deepEqual(pending.tasks.map((task) => task.id), ["T2", "T3"]);
+    assert.deepEqual(pending.tasks[0]?.dependsOn, []);
+    assert.deepEqual(pending.tasks[1]?.dependsOn, ["T2"]);
+    assert.equal(pending.recommendedFirstTask, "T2");
+  });
+
+  it("resolveAutoHitlQuestions aplica defaults seguros sin intervención humana", () => {
+    const questions: Question[] = [
+      {
+        id: "confirm_scope",
+        prompt: "¿Usar scope propuesto?",
+        kind: "confirm",
+        default: "yes",
+        blocking: true,
+      },
+      {
+        id: "single_choice",
+        prompt: "Elegí provider",
+        kind: "choice",
+        choices: ["local"],
+        blocking: true,
+      },
+      {
+        id: "optional_note",
+        prompt: "Nota opcional",
+        kind: "free",
+        default: "sin nota",
+        blocking: false,
+      },
+    ];
+
+    const resolution = resolveAutoHitlQuestions("snapshot", questions);
+
+    assert.deepEqual(resolution.answers, {
+      confirm_scope: "yes",
+      single_choice: "local",
+      optional_note: "sin nota",
+    });
+    assert.deepEqual(resolution.unresolved, []);
+  });
+
+  it("resolveAutoHitlQuestions usa la regla de explore para elegir el primer approach", () => {
+    const questions: Question[] = [
+      {
+        id: "approach",
+        prompt: "¿Qué enfoque usar?",
+        kind: "choice",
+        choices: ["adaptar actual", "reescribir"],
+        blocking: true,
+      },
+    ];
+
+    const resolution = resolveAutoHitlQuestions("explore", questions);
+
+    assert.deepEqual(resolution.answers, { approach: "adaptar actual" });
+    assert.deepEqual(resolution.unresolved, []);
+  });
+
+  it("resolveAutoHitlQuestions deja unresolved cuando no hay política segura", () => {
+    const questions: Question[] = [
+      {
+        id: "target_file",
+        prompt: "¿Qué archivo edito?",
+        kind: "free",
+        blocking: true,
+      },
+    ];
+
+    const resolution = resolveAutoHitlQuestions("run", questions);
+
+    assert.deepEqual(resolution.answers, {});
+    assert.deepEqual(resolution.unresolved.map((q) => q.id), ["target_file"]);
+    assert.match(formatAutoHitlBlockedMessage("run", resolution.unresolved), /agregá un default seguro/i);
+    assert.match(new AutoHitlBlockedError("run", resolution.unresolved).message, /HITL automático bloqueado/);
   });
 });
 

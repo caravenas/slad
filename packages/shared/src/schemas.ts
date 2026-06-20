@@ -348,7 +348,7 @@ export type RoutingDecision = z.infer<typeof RoutingDecision>;
 export const SlashCommandSurface = z.enum(["cli", "ui"]);
 export type SlashCommandSurface = z.infer<typeof SlashCommandSurface>;
 
-export const SlashCommandCategory = z.enum(["chat", "pipeline", "session", "meta", "observability"]);
+export const SlashCommandCategory = z.enum(["kit", "chat", "pipeline", "session", "meta", "observability"]);
 export type SlashCommandCategory = z.infer<typeof SlashCommandCategory>;
 
 export const SlashCommandArgType = z.enum(["string", "enum", "boolean", "path", "project", "confirm"]);
@@ -570,6 +570,45 @@ export const SLASH_COMMAND_CATALOG = SlashCommandCatalog.parse([
     aliases: ["repl", "conversacion"],
     config: { requiresProvider: true },
     metadata: { cliCommand: "chat", uiHandler: "composer.focus", keywords: ["conversation"] },
+  },
+  {
+    id: "create",
+    title: "Create",
+    description: "Genera un agente, tool, stage, pipeline o app desde un blueprint del SDK.",
+    category: "kit",
+    surfaces: ["cli"],
+    args: [
+      {
+        type: "enum",
+        name: "kind",
+        label: "Tipo",
+        description: "Qué generar.",
+        required: true,
+        options: [
+          { value: "agent", label: "Agent", description: "Proyecto de agente (mínimo o enterprise)" },
+          { value: "tool", label: "Tool", description: "Tool tipado" },
+          { value: "stage", label: "Stage", description: "Stage LLM" },
+          { value: "pipeline", label: "Pipeline", description: "Pipeline secuencial" },
+          { value: "app", label: "App", description: "App del ecosistema" },
+        ],
+      },
+      {
+        type: "string",
+        name: "name",
+        label: "Nombre",
+        description: "Nombre del artefacto a generar.",
+        required: true,
+      },
+    ],
+    executionIntent: {
+      kind: "local-action",
+      emitsSessionMessage: false,
+      invokesLocalAction: true,
+      localAction: "kit.create",
+    },
+    aliases: ["scaffold", "generar"],
+    permission: { permissions: ["workspace:write"], risk: "low" },
+    metadata: { cliCommand: "create", keywords: ["kit", "scaffold", "blueprint", "agent"] },
   },
   {
     id: "auto",

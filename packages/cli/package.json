@@ -16,8 +16,8 @@
   "scripts": {
     "build": "pnpm --filter @slad/cache --filter @slad/audit-log --filter @slad/context-budget --filter @slad/model-providers --filter @slad/hitl --filter @slad/harness --filter @slad/tools --filter @slad/pipeline build && tsc",
     "bundle": "tsup",
-    "dev": "tsx src/cli.ts",
-    "start": "node dist/cli.js",
+    "dev": "tsx src/dev.ts",
+    "start": "node ./bin/slad.js",
     "typecheck": "pnpm --filter @slad/cache --filter @slad/audit-log --filter @slad/context-budget --filter @slad/model-providers --filter @slad/hitl --filter @slad/harness --filter @slad/tools --filter @slad/pipeline build && tsc --noEmit",
     "clean": "rm -rf dist",
     "test": "node --import tsx/esm --test 'src/**/*.test.ts'"

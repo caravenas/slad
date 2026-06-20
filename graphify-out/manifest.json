@@ -1,0 +1,1527 @@
+{
+  "/Users/christopheraravena/Projects/slad/apps/dashboard/package.json": {
+    "mtime": 1781384171.5042036,
+    "ast_hash": "4f79cdefa3a6e83bff580d084aa7f2f2",
+    "semantic_hash": "4f79cdefa3a6e83bff580d084aa7f2f2"
+  },
+  "/Users/christopheraravena/Projects/slad/apps/dashboard/src/main.ts": {
+    "mtime": 1781384197.8607092,
+    "ast_hash": "d4ed995fe50f3e9ea25cf4e06f513509",
+    "semantic_hash": "d4ed995fe50f3e9ea25cf4e06f513509"
+  },
+  "/Users/christopheraravena/Projects/slad/apps/dashboard/tsconfig.json": {
+    "mtime": 1781384175.555921,
+    "ast_hash": "8e9f86fecb4f4a9d2dddb919fbc7fd9f",
+    "semantic_hash": "8e9f86fecb4f4a9d2dddb919fbc7fd9f"
+  },
+  "/Users/christopheraravena/Projects/slad/blueprints/agents/basic-agent/agents/{{name}}.agent.ts": {
+    "mtime": 1781383893.4840717,
+    "ast_hash": "66b7c25efadd1edb840cee3e0c4aaf3c",
+    "semantic_hash": "66b7c25efadd1edb840cee3e0c4aaf3c"
+  },
+  "/Users/christopheraravena/Projects/slad/blueprints/agents/basic-agent/package.json": {
+    "mtime": 1781383879.051939,
+    "ast_hash": "ce29d17c0138a540d9f7dccbc08f1aa6",
+    "semantic_hash": "ce29d17c0138a540d9f7dccbc08f1aa6"
+  },
+  "/Users/christopheraravena/Projects/slad/blueprints/agents/basic-agent/slad.config.ts": {
+    "mtime": 1781383884.6119354,
+    "ast_hash": "067573c155b0f7975499ed165c27c21d",
+    "semantic_hash": "067573c155b0f7975499ed165c27c21d"
+  },
+  "/Users/christopheraravena/Projects/slad/blueprints/agents/enterprise/package.json": {
+    "mtime": 1781383918.965676,
+    "ast_hash": "b858c8126ed042f14715fc23ec65a8e1",
+    "semantic_hash": "b858c8126ed042f14715fc23ec65a8e1"
+  },
+  "/Users/christopheraravena/Projects/slad/blueprints/agents/enterprise/runtime/main.ts": {
+    "mtime": 1781383945.36044,
+    "ast_hash": "630ff61ba40458ecc9b307776b64bdcd",
+    "semantic_hash": "630ff61ba40458ecc9b307776b64bdcd"
+  },
+  "/Users/christopheraravena/Projects/slad/blueprints/agents/enterprise/slad.config.ts": {
+    "mtime": 1781383926.2168036,
+    "ast_hash": "b75b0b5b0a7e14467821d9a24cb7c79a",
+    "semantic_hash": "b75b0b5b0a7e14467821d9a24cb7c79a"
+  },
+  "/Users/christopheraravena/Projects/slad/blueprints/agents/enterprise/tools/registry.ts": {
+    "mtime": 1781383935.7573867,
+    "ast_hash": "9880f8528b6874441d434ad89d4f4cf4",
+    "semantic_hash": "9880f8528b6874441d434ad89d4f4cf4"
+  },
+  "/Users/christopheraravena/Projects/slad/blueprints/pipelines/sequential-pipeline/{{name}}.ts": {
+    "mtime": 1781383872.7207222,
+    "ast_hash": "3f0d25be6207580ab44c221a7716f7ce",
+    "semantic_hash": "3f0d25be6207580ab44c221a7716f7ce"
+  },
+  "/Users/christopheraravena/Projects/slad/blueprints/stages/llm-stage/{{name}}.ts": {
+    "mtime": 1781383865.6037993,
+    "ast_hash": "c556dce5af33f67af7f38376afe15004",
+    "semantic_hash": "c556dce5af33f67af7f38376afe15004"
+  },
+  "/Users/christopheraravena/Projects/slad/blueprints/tools/shell-tool/{{name}}.ts": {
+    "mtime": 1781383859.2588038,
+    "ast_hash": "394de327316420e6ac7db0daa7f5b14b",
+    "semantic_hash": "394de327316420e6ac7db0daa7f5b14b"
+  },
+  "/Users/christopheraravena/Projects/slad/examples/research-agent/package.json": {
+    "mtime": 1781382802.9260163,
+    "ast_hash": "1c494ae1d6869568ca5d6b4100d25cf9",
+    "semantic_hash": "1c494ae1d6869568ca5d6b4100d25cf9"
+  },
+  "/Users/christopheraravena/Projects/slad/examples/research-agent/src/agent.ts": {
+    "mtime": 1781382551.2562575,
+    "ast_hash": "4aac2ecb5126cd20564975bbe6b50b87",
+    "semantic_hash": "4aac2ecb5126cd20564975bbe6b50b87"
+  },
+  "/Users/christopheraravena/Projects/slad/examples/research-agent/src/main.ts": {
+    "mtime": 1781382557.8400023,
+    "ast_hash": "aa27df46130e2fc4ba70ab9d20b4f268",
+    "semantic_hash": "aa27df46130e2fc4ba70ab9d20b4f268"
+  },
+  "/Users/christopheraravena/Projects/slad/examples/research-agent/src/mock-provider.ts": {
+    "mtime": 1781382545.0189419,
+    "ast_hash": "3df34787e5a2b41c61d9b08dcc952b9e",
+    "semantic_hash": "3df34787e5a2b41c61d9b08dcc952b9e"
+  },
+  "/Users/christopheraravena/Projects/slad/examples/research-agent/src/pipeline.ts": {
+    "mtime": 1781382533.0810084,
+    "ast_hash": "efee382d46c24715023911632c30ea7e",
+    "semantic_hash": "efee382d46c24715023911632c30ea7e"
+  },
+  "/Users/christopheraravena/Projects/slad/examples/research-agent/src/stages.ts": {
+    "mtime": 1781382528.3427095,
+    "ast_hash": "74185c7e114e6f40eafd4ebd657a1917",
+    "semantic_hash": "74185c7e114e6f40eafd4ebd657a1917"
+  },
+  "/Users/christopheraravena/Projects/slad/examples/research-agent/src/tools.ts": {
+    "mtime": 1781382515.8917987,
+    "ast_hash": "da72fe7035f1fd09817347ad1c920e43",
+    "semantic_hash": "da72fe7035f1fd09817347ad1c920e43"
+  },
+  "/Users/christopheraravena/Projects/slad/examples/research-agent/src/types.ts": {
+    "mtime": 1781382509.364645,
+    "ast_hash": "11b307edd9914cc132f1d3e14a6fe7e4",
+    "semantic_hash": "11b307edd9914cc132f1d3e14a6fe7e4"
+  },
+  "/Users/christopheraravena/Projects/slad/examples/research-agent/tsconfig.json": {
+    "mtime": 1781382503.1872237,
+    "ast_hash": "8e9f86fecb4f4a9d2dddb919fbc7fd9f",
+    "semantic_hash": "8e9f86fecb4f4a9d2dddb919fbc7fd9f"
+  },
+  "/Users/christopheraravena/Projects/slad/package.json": {
+    "mtime": 1778633805.4791877,
+    "ast_hash": "5d261518f004c583ad3a707a1a9aed7e",
+    "semantic_hash": "5d261518f004c583ad3a707a1a9aed7e"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/agent/package.json": {
+    "mtime": 1781383647.5430346,
+    "ast_hash": "2bb1a12b18e95a971638b519c1b79cb4",
+    "semantic_hash": "2bb1a12b18e95a971638b519c1b79cb4"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/agent/src/agent.ts": {
+    "mtime": 1780011155.0618184,
+    "ast_hash": "9a42f6d7261061004049169f56f0e955",
+    "semantic_hash": "9a42f6d7261061004049169f56f0e955"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/agent/src/index.ts": {
+    "mtime": 1780003957.0757518,
+    "ast_hash": "db72b30f24072ba92323fb14fd3bfe6c",
+    "semantic_hash": "db72b30f24072ba92323fb14fd3bfe6c"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/agent/tsconfig.json": {
+    "mtime": 1780011377.812406,
+    "ast_hash": "315eb3c4869455cd73395314ae1dc4f0",
+    "semantic_hash": "315eb3c4869455cd73395314ae1dc4f0"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/audit-log/package.json": {
+    "mtime": 1779489618.0749626,
+    "ast_hash": "749b1fd984cb75311f8bcbe5e3edb210",
+    "semantic_hash": "749b1fd984cb75311f8bcbe5e3edb210"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/audit-log/src/audit.test.ts": {
+    "mtime": 1779489241.7062442,
+    "ast_hash": "1ccbfde8284318ef5bddfc0792d5cc4a",
+    "semantic_hash": "1ccbfde8284318ef5bddfc0792d5cc4a"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/audit-log/src/audit.ts": {
+    "mtime": 1779489241.705658,
+    "ast_hash": "614803bd71c45259163070e8fbf0a83f",
+    "semantic_hash": "614803bd71c45259163070e8fbf0a83f"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/audit-log/src/index.ts": {
+    "mtime": 1779489279.7032893,
+    "ast_hash": "4f783c43880ea015acf45da8bb25c862",
+    "semantic_hash": "4f783c43880ea015acf45da8bb25c862"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/audit-log/tsconfig.json": {
+    "mtime": 1779489267.3644595,
+    "ast_hash": "ed01ebb19c5d3b58dcb902584ec83f8f",
+    "semantic_hash": "ed01ebb19c5d3b58dcb902584ec83f8f"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cache/package.json": {
+    "mtime": 1779489612.8716905,
+    "ast_hash": "11984a0774d216dbbcd65ff1ff933471",
+    "semantic_hash": "11984a0774d216dbbcd65ff1ff933471"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cache/src/index.ts": {
+    "mtime": 1779489279.7516997,
+    "ast_hash": "54045832423c96cf9d4824847590fa37",
+    "semantic_hash": "54045832423c96cf9d4824847590fa37"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cache/src/invalidation.test.ts": {
+    "mtime": 1779489241.6958163,
+    "ast_hash": "419d1ae6978ebd5c190b0b9c9258aa88",
+    "semantic_hash": "419d1ae6978ebd5c190b0b9c9258aa88"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cache/src/invalidation.ts": {
+    "mtime": 1779489241.6972456,
+    "ast_hash": "2b95859d15f44fbb7d4a957af87b5a22",
+    "semantic_hash": "2b95859d15f44fbb7d4a957af87b5a22"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cache/src/keys.test.ts": {
+    "mtime": 1779489241.6978807,
+    "ast_hash": "9eaf5de87e080d662142480f1af5ce14",
+    "semantic_hash": "9eaf5de87e080d662142480f1af5ce14"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cache/src/keys.ts": {
+    "mtime": 1779489241.6984267,
+    "ast_hash": "13d5f8922d861eef12f687dce1603c9b",
+    "semantic_hash": "13d5f8922d861eef12f687dce1603c9b"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cache/src/reusable.ts": {
+    "mtime": 1779489516.1013515,
+    "ast_hash": "fca49bacfbcdae8b34d5a51643040deb",
+    "semantic_hash": "fca49bacfbcdae8b34d5a51643040deb"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cache/src/store.test.ts": {
+    "mtime": 1779489241.6997323,
+    "ast_hash": "d5141dea07a1d71cf27bfd79c7eabf18",
+    "semantic_hash": "d5141dea07a1d71cf27bfd79c7eabf18"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cache/src/store.ts": {
+    "mtime": 1779489777.050008,
+    "ast_hash": "2a7031dd0a31e34749231a3613bcbcd3",
+    "semantic_hash": "2a7031dd0a31e34749231a3613bcbcd3"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cache/tsconfig.json": {
+    "mtime": 1779489267.25781,
+    "ast_hash": "ed01ebb19c5d3b58dcb902584ec83f8f",
+    "semantic_hash": "ed01ebb19c5d3b58dcb902584ec83f8f"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/bin/slad-os.js": {
+    "mtime": 1776910357.0,
+    "ast_hash": "ea86f32e32e526799fdade4dd63d9661",
+    "semantic_hash": "ea86f32e32e526799fdade4dd63d9661"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/bin/slad.js": {
+    "mtime": 1780095322.7620134,
+    "ast_hash": "642cfd3ae59d2435f4004c0dd92adf2b",
+    "semantic_hash": "642cfd3ae59d2435f4004c0dd92adf2b"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/demo/agents/demo.agent.ts": {
+    "mtime": 1781388997.2443526,
+    "ast_hash": "21dde4d3a8e1130346b249ceab2bc1a6",
+    "semantic_hash": "21dde4d3a8e1130346b249ceab2bc1a6"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/demo/package.json": {
+    "mtime": 1781388997.2445447,
+    "ast_hash": "1e93aedcb07fb066c4a103f67aa494c8",
+    "semantic_hash": "1e93aedcb07fb066c4a103f67aa494c8"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/demo/slad.config.ts": {
+    "mtime": 1781388997.24474,
+    "ast_hash": "32bf05f5d2618f394f30a5a9049d8426",
+    "semantic_hash": "32bf05f5d2618f394f30a5a9049d8426"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/package.json": {
+    "mtime": 1781389430.2781715,
+    "ast_hash": "d804117779824497afc20463a8d397e4",
+    "semantic_hash": "d804117779824497afc20463a8d397e4"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/agents/explorer.ts": {
+    "mtime": 1779992387.11879,
+    "ast_hash": "1ca0bd6c256e58430766470fd66a9d8e",
+    "semantic_hash": "1ca0bd6c256e58430766470fd66a9d8e"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/agents/prompts.ts": {
+    "mtime": 1778786325.9615934,
+    "ast_hash": "9de2ab37c739068f8a389f7ba71df057",
+    "semantic_hash": "9de2ab37c739068f8a389f7ba71df057"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/agents/registry.ts": {
+    "mtime": 1780455041.6823027,
+    "ast_hash": "c994ff4a6f9db27656f32ed201caee7d",
+    "semantic_hash": "c994ff4a6f9db27656f32ed201caee7d"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/cli.ts": {
+    "mtime": 1781392612.3357024,
+    "ast_hash": "79d07f18a0636998d6ff6fe1c48335a1",
+    "semantic_hash": "79d07f18a0636998d6ff6fe1c48335a1"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/cli/ui.test.ts": {
+    "mtime": 1778020791.0,
+    "ast_hash": "23ab3733ef4b10aed5394a71c6f03aa3",
+    "semantic_hash": "23ab3733ef4b10aed5394a71c6f03aa3"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/cli/ui.ts": {
+    "mtime": 1780096709.4453545,
+    "ast_hash": "3f87af1364944f81c4eb8d3674da8161",
+    "semantic_hash": "3f87af1364944f81c4eb8d3674da8161"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/cli/version.test.ts": {
+    "mtime": 1777787686.0,
+    "ast_hash": "a0ed9cfa45a12582b335c52d0d5124de",
+    "semantic_hash": "a0ed9cfa45a12582b335c52d0d5124de"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/cli/version.ts": {
+    "mtime": 1777787409.0,
+    "ast_hash": "c53d783369e904eb5ff78882d16555f7",
+    "semantic_hash": "c53d783369e904eb5ff78882d16555f7"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/agents.ts": {
+    "mtime": 1780458477.6627896,
+    "ast_hash": "47ff90616225ca66415e0fb8965d86ba",
+    "semantic_hash": "47ff90616225ca66415e0fb8965d86ba"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/ask.ts": {
+    "mtime": 1780098838.2868156,
+    "ast_hash": "6b74302e9095749500cebf4a535c8d93",
+    "semantic_hash": "6b74302e9095749500cebf4a535c8d93"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/auto-checkpoint.test.ts": {
+    "mtime": 1778551398.0,
+    "ast_hash": "0ae61390df69d691645d69371953a452",
+    "semantic_hash": "0ae61390df69d691645d69371953a452"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/auto-checkpoint.ts": {
+    "mtime": 1779722842.3394341,
+    "ast_hash": "8926281edceddb1378f1780faa140386",
+    "semantic_hash": "8926281edceddb1378f1780faa140386"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/auto.test.ts": {
+    "mtime": 1781490134.8380623,
+    "ast_hash": "a6b7060e6139331f1b4c0f7b71ff8275",
+    "semantic_hash": "a6b7060e6139331f1b4c0f7b71ff8275"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/auto.ts": {
+    "mtime": 1781490118.2713532,
+    "ast_hash": "39e95d185178009314bb985026951043",
+    "semantic_hash": "39e95d185178009314bb985026951043"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/chat-prompt.test.ts": {
+    "mtime": 1781404115.9042444,
+    "ast_hash": "1b4d39bce35ff234f3d882cb524df0b5",
+    "semantic_hash": "1b4d39bce35ff234f3d882cb524df0b5"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/chat-prompt.ts": {
+    "mtime": 1781404103.0811384,
+    "ast_hash": "49c766ddbab407fce51c49f54b1023c4",
+    "semantic_hash": "49c766ddbab407fce51c49f54b1023c4"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/chat.test.ts": {
+    "mtime": 1781489683.7541902,
+    "ast_hash": "f15ae9017af3b6bb73c85e1363dbfd11",
+    "semantic_hash": "f15ae9017af3b6bb73c85e1363dbfd11"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/chat.ts": {
+    "mtime": 1781404108.647938,
+    "ast_hash": "9508348c38f0e716a1967f8bf55db320",
+    "semantic_hash": "9508348c38f0e716a1967f8bf55db320"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/create.test.ts": {
+    "mtime": 1781384076.2568374,
+    "ast_hash": "62f34b9973426f8af0b5230b36c2c0e7",
+    "semantic_hash": "62f34b9973426f8af0b5230b36c2c0e7"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/create.ts": {
+    "mtime": 1781391258.5881588,
+    "ast_hash": "5f390e523d7fcf385f773d58aeab6997",
+    "semantic_hash": "5f390e523d7fcf385f773d58aeab6997"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/dag.test.ts": {
+    "mtime": 1778551398.0,
+    "ast_hash": "27bf3940ee0d7c61cf241ead45e956e7",
+    "semantic_hash": "27bf3940ee0d7c61cf241ead45e956e7"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/dag.ts": {
+    "mtime": 1778551398.0,
+    "ast_hash": "4588798150b749bfe2f5be8b28d87098",
+    "semantic_hash": "4588798150b749bfe2f5be8b28d87098"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/evolve.test.ts": {
+    "mtime": 1778790259.3090172,
+    "ast_hash": "acabf2ea35027d0d224e5b9c5b768e1b",
+    "semantic_hash": "acabf2ea35027d0d224e5b9c5b768e1b"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/evolve.ts": {
+    "mtime": 1780098838.3228712,
+    "ast_hash": "259e68c2a4497528fdb5ac0b33fb073a",
+    "semantic_hash": "259e68c2a4497528fdb5ac0b33fb073a"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/explore.ts": {
+    "mtime": 1780703089.790921,
+    "ast_hash": "d0c14e7c5919ea6b41a7769a336b5b2b",
+    "semantic_hash": "d0c14e7c5919ea6b41a7769a336b5b2b"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/learn.ts": {
+    "mtime": 1780703158.5284665,
+    "ast_hash": "47ddba656ada0ce02f57758571cc0651",
+    "semantic_hash": "47ddba656ada0ce02f57758571cc0651"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/model.ts": {
+    "mtime": 1780703126.6066527,
+    "ast_hash": "4c3ffba3b844168cd1c3e3fb76575e92",
+    "semantic_hash": "4c3ffba3b844168cd1c3e3fb76575e92"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/plan.ts": {
+    "mtime": 1780703240.4640326,
+    "ast_hash": "77c66ff5124de939d5cd0c8fb5d6e2bc",
+    "semantic_hash": "77c66ff5124de939d5cd0c8fb5d6e2bc"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/run.ts": {
+    "mtime": 1780455672.5720785,
+    "ast_hash": "d36200c092ee2c43893cc6636e960d4a",
+    "semantic_hash": "d36200c092ee2c43893cc6636e960d4a"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/session.test.ts": {
+    "mtime": 1779993676.9118934,
+    "ast_hash": "02e1e06c719285b88490f04d331e0294",
+    "semantic_hash": "02e1e06c719285b88490f04d331e0294"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/session.ts": {
+    "mtime": 1779992806.7253954,
+    "ast_hash": "6d4acd6d886bf6b7bc0c8633e6627de5",
+    "semantic_hash": "6d4acd6d886bf6b7bc0c8633e6627de5"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/slash.ts": {
+    "mtime": 1781489668.0759442,
+    "ast_hash": "a2a73e3639d8a1b9014a8604ded7b85a",
+    "semantic_hash": "a2a73e3639d8a1b9014a8604ded7b85a"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/snapshot.ts": {
+    "mtime": 1780703125.3516521,
+    "ast_hash": "618a30ae19db080dc238061b30c79b57",
+    "semantic_hash": "618a30ae19db080dc238061b30c79b57"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/stats.test.ts": {
+    "mtime": 1778787802.1924672,
+    "ast_hash": "3a15f7c59c89ba55711b082608686cb2",
+    "semantic_hash": "3a15f7c59c89ba55711b082608686cb2"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/commands/stats.ts": {
+    "mtime": 1778787695.5110924,
+    "ast_hash": "194ce47999ad01825ca789217477a7fb",
+    "semantic_hash": "194ce47999ad01825ca789217477a7fb"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/config/defaults.ts": {
+    "mtime": 1777316368.0,
+    "ast_hash": "0ae463c5c58c86ce5894f29a55918113",
+    "semantic_hash": "0ae463c5c58c86ce5894f29a55918113"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/config/validate.test.ts": {
+    "mtime": 1777316497.0,
+    "ast_hash": "9710497f1186a06b71b4184838cd10a5",
+    "semantic_hash": "9710497f1186a06b71b4184838cd10a5"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/config/validate.ts": {
+    "mtime": 1777316412.0,
+    "ast_hash": "c841b7435d111b9dcdbf1039ebf8642c",
+    "semantic_hash": "c841b7435d111b9dcdbf1039ebf8642c"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/context/scratchpad.test.ts": {
+    "mtime": 1779992387.1407206,
+    "ast_hash": "c4ee3a1d181c146409b0d697237b4051",
+    "semantic_hash": "c4ee3a1d181c146409b0d697237b4051"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/context/scratchpad.ts": {
+    "mtime": 1779992387.1413414,
+    "ast_hash": "93cb5e1421a6915ac9026c76e0b13a9d",
+    "semantic_hash": "93cb5e1421a6915ac9026c76e0b13a9d"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/context/types.ts": {
+    "mtime": 1779721188.8960705,
+    "ast_hash": "679300a1886384f495f32a7fee77d0c7",
+    "semantic_hash": "679300a1886384f495f32a7fee77d0c7"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/backend-registry.test.ts": {
+    "mtime": 1780703137.170498,
+    "ast_hash": "b9ed6e0dc540a581370f616d16a09534",
+    "semantic_hash": "b9ed6e0dc540a581370f616d16a09534"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/backend-registry.ts": {
+    "mtime": 1780703130.9737155,
+    "ast_hash": "41f384e9e85f19c516921bbb46658374",
+    "semantic_hash": "41f384e9e85f19c516921bbb46658374"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/classifier.ts": {
+    "mtime": 1779992387.1425028,
+    "ast_hash": "bc28606053cac0368b2aca36cfdea4fb",
+    "semantic_hash": "bc28606053cac0368b2aca36cfdea4fb"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/cli-provider.ts": {
+    "mtime": 1780098813.786782,
+    "ast_hash": "0e1a7412b637fc423f028061777bf1a2",
+    "semantic_hash": "0e1a7412b637fc423f028061777bf1a2"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/config.test.ts": {
+    "mtime": 1780287551.2146444,
+    "ast_hash": "bed0b281d0634157f293aa9b3c4bd316",
+    "semantic_hash": "bed0b281d0634157f293aa9b3c4bd316"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/config.ts": {
+    "mtime": 1780455672.5732005,
+    "ast_hash": "2e938b3387ad27dabc7aa877c62237e0",
+    "semantic_hash": "2e938b3387ad27dabc7aa877c62237e0"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/context.ts": {
+    "mtime": 1777858315.0,
+    "ast_hash": "029d2896ebfb1c5111b87583ddd49697",
+    "semantic_hash": "029d2896ebfb1c5111b87583ddd49697"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/decision-gate.test.ts": {
+    "mtime": 1778781080.415471,
+    "ast_hash": "426aca1ce848c63fa300b2983250cc08",
+    "semantic_hash": "426aca1ce848c63fa300b2983250cc08"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/decision-gate.ts": {
+    "mtime": 1778780968.0409997,
+    "ast_hash": "10947f45df3d8f41eaffb88551e744be",
+    "semantic_hash": "10947f45df3d8f41eaffb88551e744be"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/errors.test.ts": {
+    "mtime": 1777671548.0,
+    "ast_hash": "63cd1c71a8540af3d8a3644f22fd56ed",
+    "semantic_hash": "63cd1c71a8540af3d8a3644f22fd56ed"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/errors.ts": {
+    "mtime": 1778554641.0,
+    "ast_hash": "e33f8fc4a62f67de1e07ab432d2a2842",
+    "semantic_hash": "e33f8fc4a62f67de1e07ab432d2a2842"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/format.test.ts": {
+    "mtime": 1778799554.3284755,
+    "ast_hash": "0deb7fe3ed571cdb50f923a36a472b5c",
+    "semantic_hash": "0deb7fe3ed571cdb50f923a36a472b5c"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/format.ts": {
+    "mtime": 1778799395.9695222,
+    "ast_hash": "b45d926928209dba601dd858ca35ff87",
+    "semantic_hash": "b45d926928209dba601dd858ca35ff87"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/hitl.ts": {
+    "mtime": 1779670601.5360868,
+    "ast_hash": "26c58805c269f53c70144cfc314f53d5",
+    "semantic_hash": "26c58805c269f53c70144cfc314f53d5"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/inventory.test.ts": {
+    "mtime": 1779993766.5405042,
+    "ast_hash": "962afcca4c489cefd004be5dea22bd2c",
+    "semantic_hash": "962afcca4c489cefd004be5dea22bd2c"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/inventory.ts": {
+    "mtime": 1779993628.2029502,
+    "ast_hash": "8b4260c3a9378f265b8cffc5f36f0290",
+    "semantic_hash": "8b4260c3a9378f265b8cffc5f36f0290"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/logger.test.ts": {
+    "mtime": 1777671799.0,
+    "ast_hash": "10c28a4283755d06a7454fc5cfd88aec",
+    "semantic_hash": "10c28a4283755d06a7454fc5cfd88aec"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/logger.ts": {
+    "mtime": 1777671439.0,
+    "ast_hash": "5c2f0c591b786e58ca6822e8a60e3476",
+    "semantic_hash": "5c2f0c591b786e58ca6822e8a60e3476"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/project-config.ts": {
+    "mtime": 1778714433.2757201,
+    "ast_hash": "2e83c4699e0e8b62ccab5b2b9f8e1adf",
+    "semantic_hash": "2e83c4699e0e8b62ccab5b2b9f8e1adf"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/providers.ts": {
+    "mtime": 1780098820.7085586,
+    "ast_hash": "6807d757672edb17f9eaa6538575052b",
+    "semantic_hash": "6807d757672edb17f9eaa6538575052b"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/session-compat.test.ts": {
+    "mtime": 1778716676.1730435,
+    "ast_hash": "667e243caef86cd57bd3ae964296569d",
+    "semantic_hash": "667e243caef86cd57bd3ae964296569d"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/session.ts": {
+    "mtime": 1780703068.5869813,
+    "ast_hash": "383b03eeda42f6b0965d8018a6a3b8e1",
+    "semantic_hash": "383b03eeda42f6b0965d8018a6a3b8e1"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/setup.ts": {
+    "mtime": 1780099005.5920236,
+    "ast_hash": "9471d6945980c3ecd79a994e246c626e",
+    "semantic_hash": "9471d6945980c3ecd79a994e246c626e"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/stats.test.ts": {
+    "mtime": 1779489674.8765595,
+    "ast_hash": "4541b24643f90ae7d2a606b0341889aa",
+    "semantic_hash": "4541b24643f90ae7d2a606b0341889aa"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/stats.ts": {
+    "mtime": 1779774747.3182404,
+    "ast_hash": "0bb4a948cf806d7a389a8f729cf79a05",
+    "semantic_hash": "0bb4a948cf806d7a389a8f729cf79a05"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/core/types.ts": {
+    "mtime": 1780688143.3079443,
+    "ast_hash": "95881294083fa2f0f9c18799171215b8",
+    "semantic_hash": "95881294083fa2f0f9c18799171215b8"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/dev.ts": {
+    "mtime": 1781389732.0513828,
+    "ast_hash": "d7fedcf5e89b701de39f444835399b4c",
+    "semantic_hash": "d7fedcf5e89b701de39f444835399b4c"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/harness/approval.ts": {
+    "mtime": 1779670711.2705376,
+    "ast_hash": "020e03ae030df36b9f591271af2f32e7",
+    "semantic_hash": "020e03ae030df36b9f591271af2f32e7"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/harness/classifier.test.ts": {
+    "mtime": 1778780653.0117192,
+    "ast_hash": "9c82137c119d9915475d457376db42b2",
+    "semantic_hash": "9c82137c119d9915475d457376db42b2"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/harness/classifier.ts": {
+    "mtime": 1779670612.082636,
+    "ast_hash": "66cdc7b9d321f82cc8c86baa7594c204",
+    "semantic_hash": "66cdc7b9d321f82cc8c86baa7594c204"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/harness/config.ts": {
+    "mtime": 1779670701.9122162,
+    "ast_hash": "c28b9a06829e57dd0aaa5a86d2fac7cd",
+    "semantic_hash": "c28b9a06829e57dd0aaa5a86d2fac7cd"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/harness/index.ts": {
+    "mtime": 1779670612.1375067,
+    "ast_hash": "66cdc7b9d321f82cc8c86baa7594c204",
+    "semantic_hash": "66cdc7b9d321f82cc8c86baa7594c204"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/harness/types.ts": {
+    "mtime": 1779670612.1068182,
+    "ast_hash": "66cdc7b9d321f82cc8c86baa7594c204",
+    "semantic_hash": "66cdc7b9d321f82cc8c86baa7594c204"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/persistence/config.test.ts": {
+    "mtime": 1778123580.0,
+    "ast_hash": "69a602f668ba8f810d34ff301b397729",
+    "semantic_hash": "69a602f668ba8f810d34ff301b397729"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/persistence/debates.ts": {
+    "mtime": 1778785995.7830064,
+    "ast_hash": "e53ecf8af1028254b47e4e2156bc9496",
+    "semantic_hash": "e53ecf8af1028254b47e4e2156bc9496"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/persistence/decisions.test.ts": {
+    "mtime": 1778781455.6464725,
+    "ast_hash": "e6502fa7877460382f2cd4d2f16fc835",
+    "semantic_hash": "e6502fa7877460382f2cd4d2f16fc835"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/persistence/decisions.ts": {
+    "mtime": 1778781419.9548576,
+    "ast_hash": "caadc0f288bc08a9bce21696ee657142",
+    "semantic_hash": "caadc0f288bc08a9bce21696ee657142"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/persistence/index.ts": {
+    "mtime": 1778554641.0,
+    "ast_hash": "1bb1a8d038a465d13b60e23c76082781",
+    "semantic_hash": "1bb1a8d038a465d13b60e23c76082781"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/persistence/layout.ts": {
+    "mtime": 1779776271.6462355,
+    "ast_hash": "c6375f2c390b374558c536f3f5d0530f",
+    "semantic_hash": "c6375f2c390b374558c536f3f5d0530f"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/persistence/run.test.ts": {
+    "mtime": 1778780582.7882235,
+    "ast_hash": "0f04025e7b4f00bee40f1a4f914f41b5",
+    "semantic_hash": "0f04025e7b4f00bee40f1a4f914f41b5"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/persistence/telemetry.test.ts": {
+    "mtime": 1778787038.0966136,
+    "ast_hash": "1569956a6e75c03e8b06fca8aae0fd0f",
+    "semantic_hash": "1569956a6e75c03e8b06fca8aae0fd0f"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/persistence/telemetry.ts": {
+    "mtime": 1779774757.20362,
+    "ast_hash": "bdd5b4b8dd7eea686c5d100981b37af6",
+    "semantic_hash": "bdd5b4b8dd7eea686c5d100981b37af6"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/project/project-id.test.ts": {
+    "mtime": 1777404977.0,
+    "ast_hash": "c85ba330fa75335507cf1f87a638c40c",
+    "semantic_hash": "c85ba330fa75335507cf1f87a638c40c"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/project/project-id.ts": {
+    "mtime": 1777404973.0,
+    "ast_hash": "f358e0b612d58585f4194ce5e4416ae9",
+    "semantic_hash": "f358e0b612d58585f4194ce5e4416ae9"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/tests/e2e-auto-dry-run.test.ts": {
+    "mtime": 1781490680.982241,
+    "ast_hash": "6be24d350ad44a9211d31bea7126c26e",
+    "semantic_hash": "6be24d350ad44a9211d31bea7126c26e"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/test_prompt.mjs": {
+    "mtime": 1780093418.3157823,
+    "ast_hash": "afabe43a5bcd96d7763cff6158014659",
+    "semantic_hash": "afabe43a5bcd96d7763cff6158014659"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/test_ui.mjs": {
+    "mtime": 1780092641.2311249,
+    "ast_hash": "5cda2c95294d9f27f411eb14097c1e1c",
+    "semantic_hash": "5cda2c95294d9f27f411eb14097c1e1c"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/tsconfig.json": {
+    "mtime": 1780004256.255085,
+    "ast_hash": "84ac5c0ef9bc531af18cb971255dd867",
+    "semantic_hash": "84ac5c0ef9bc531af18cb971255dd867"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/tsup.config.ts": {
+    "mtime": 1780092022.3942544,
+    "ast_hash": "453c28b56738f61502fb96c5e9fe0249",
+    "semantic_hash": "453c28b56738f61502fb96c5e9fe0249"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/context-budget/package.json": {
+    "mtime": 1779489618.0224855,
+    "ast_hash": "7f15228d269844d3060b55c8e0b36a52",
+    "semantic_hash": "7f15228d269844d3060b55c8e0b36a52"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/context-budget/src/budget-history.test.ts": {
+    "mtime": 1779489241.7141986,
+    "ast_hash": "e6b23eab03e5f997a76bcdc4bef5f035",
+    "semantic_hash": "e6b23eab03e5f997a76bcdc4bef5f035"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/context-budget/src/budget-history.ts": {
+    "mtime": 1779489241.7136693,
+    "ast_hash": "0450b3ead5dc6aca452aacf6a831faee",
+    "semantic_hash": "0450b3ead5dc6aca452aacf6a831faee"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/context-budget/src/budget.test.ts": {
+    "mtime": 1779489241.71314,
+    "ast_hash": "d4bd5b1a9f52d6a677d038ec0887065a",
+    "semantic_hash": "d4bd5b1a9f52d6a677d038ec0887065a"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/context-budget/src/budget.ts": {
+    "mtime": 1779489309.0733838,
+    "ast_hash": "e56740689a895ace21c16c3e65c4bc49",
+    "semantic_hash": "e56740689a895ace21c16c3e65c4bc49"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/context-budget/src/index.ts": {
+    "mtime": 1779489279.7927544,
+    "ast_hash": "c1b5dacbbce1456cf6220c9fb8f6cae8",
+    "semantic_hash": "c1b5dacbbce1456cf6220c9fb8f6cae8"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/context-budget/src/types.ts": {
+    "mtime": 1779721186.202932,
+    "ast_hash": "679300a1886384f495f32a7fee77d0c7",
+    "semantic_hash": "679300a1886384f495f32a7fee77d0c7"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/context-budget/tsconfig.json": {
+    "mtime": 1779489267.2901251,
+    "ast_hash": "ed01ebb19c5d3b58dcb902584ec83f8f",
+    "semantic_hash": "ed01ebb19c5d3b58dcb902584ec83f8f"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/harness/package.json": {
+    "mtime": 1779670120.0942059,
+    "ast_hash": "f37c3ae1e51626816bed9ae0ac9e4e85",
+    "semantic_hash": "f37c3ae1e51626816bed9ae0ac9e4e85"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/harness/src/approval.test.ts": {
+    "mtime": 1779670006.5775375,
+    "ast_hash": "2dec36ecce70f7861ebb5b05c4169f3a",
+    "semantic_hash": "2dec36ecce70f7861ebb5b05c4169f3a"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/harness/src/approval.ts": {
+    "mtime": 1779670763.2109795,
+    "ast_hash": "7702f6235264c0bfab8cdd4dbb226df8",
+    "semantic_hash": "7702f6235264c0bfab8cdd4dbb226df8"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/harness/src/classifier.test.ts": {
+    "mtime": 1779670280.5578177,
+    "ast_hash": "9c82137c119d9915475d457376db42b2",
+    "semantic_hash": "9c82137c119d9915475d457376db42b2"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/harness/src/classifier.ts": {
+    "mtime": 1779670250.5942473,
+    "ast_hash": "0f6e012e14e5abe41bb09e94ccbf9cfc",
+    "semantic_hash": "0f6e012e14e5abe41bb09e94ccbf9cfc"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/harness/src/config.ts": {
+    "mtime": 1779670127.288953,
+    "ast_hash": "443d6a1b745f0e405024f3fce459bc4a",
+    "semantic_hash": "443d6a1b745f0e405024f3fce459bc4a"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/harness/src/index.ts": {
+    "mtime": 1780010940.7568576,
+    "ast_hash": "38c1ab3335c4d0cff2c2497e9fb216b6",
+    "semantic_hash": "38c1ab3335c4d0cff2c2497e9fb216b6"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/harness/src/types.ts": {
+    "mtime": 1780010931.0518746,
+    "ast_hash": "cd0052c5096e69aaea834a835e7ce873",
+    "semantic_hash": "cd0052c5096e69aaea834a835e7ce873"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/harness/tsconfig.json": {
+    "mtime": 1779670120.3362014,
+    "ast_hash": "d58d887b69c351051ef5e90df7419387",
+    "semantic_hash": "d58d887b69c351051ef5e90df7419387"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/hitl/package.json": {
+    "mtime": 1779670204.2437081,
+    "ast_hash": "719d702dfee6adee5a547717ea25f37a",
+    "semantic_hash": "719d702dfee6adee5a547717ea25f37a"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/hitl/src/hitl-auto-resolve.ts": {
+    "mtime": 1779670348.906432,
+    "ast_hash": "ddd602aebc93c42ac13011f8d674f7ee",
+    "semantic_hash": "ddd602aebc93c42ac13011f8d674f7ee"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/hitl/src/hitl-loop.ts": {
+    "mtime": 1779670163.993478,
+    "ast_hash": "225d5c8846493dfaea6ca4bf728d9ee4",
+    "semantic_hash": "225d5c8846493dfaea6ca4bf728d9ee4"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/hitl/src/hitl.test.ts": {
+    "mtime": 1779670349.6314855,
+    "ast_hash": "c5a00c0722a77e407ba08a471790b83e",
+    "semantic_hash": "c5a00c0722a77e407ba08a471790b83e"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/hitl/src/hitl.ts": {
+    "mtime": 1779670182.4254372,
+    "ast_hash": "12050145bf75dcb1ef1f3da2a81dd92a",
+    "semantic_hash": "12050145bf75dcb1ef1f3da2a81dd92a"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/hitl/src/index.test.ts": {
+    "mtime": 1779670350.3429217,
+    "ast_hash": "48852c40e3feac599eb69cbee86cfaa8",
+    "semantic_hash": "48852c40e3feac599eb69cbee86cfaa8"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/hitl/src/index.ts": {
+    "mtime": 1779670165.8885615,
+    "ast_hash": "2c7ae084bc90693548e3f818ae87dcb0",
+    "semantic_hash": "2c7ae084bc90693548e3f818ae87dcb0"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/hitl/src/logger.ts": {
+    "mtime": 1779670355.9474723,
+    "ast_hash": "3be4be1550ec033b05aec3e8da29bd9c",
+    "semantic_hash": "3be4be1550ec033b05aec3e8da29bd9c"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/hitl/src/transport.ts": {
+    "mtime": 1779670348.7590241,
+    "ast_hash": "ff0ca693e5f44031066b94d2d871278d",
+    "semantic_hash": "ff0ca693e5f44031066b94d2d871278d"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/hitl/tsconfig.json": {
+    "mtime": 1779670055.2454734,
+    "ast_hash": "eeddfd14c01b46209dc3b61eedec6c46",
+    "semantic_hash": "eeddfd14c01b46209dc3b61eedec6c46"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/memory/package.json": {
+    "mtime": 1780010352.6551929,
+    "ast_hash": "0fa8453559cce30f854a21838a2462c4",
+    "semantic_hash": "0fa8453559cce30f854a21838a2462c4"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/memory/src/in-memory.ts": {
+    "mtime": 1780010368.4991074,
+    "ast_hash": "41a477f0d51cc2b7f5c5349aecaf03be",
+    "semantic_hash": "41a477f0d51cc2b7f5c5349aecaf03be"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/memory/src/index.ts": {
+    "mtime": 1780010358.5993671,
+    "ast_hash": "b3ab70740b019bfe3014b9e27dabe4df",
+    "semantic_hash": "b3ab70740b019bfe3014b9e27dabe4df"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/memory/src/memory.test.ts": {
+    "mtime": 1780010419.303404,
+    "ast_hash": "3df92530747565c7d0c930835826ae83",
+    "semantic_hash": "3df92530747565c7d0c930835826ae83"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/memory/src/types.ts": {
+    "mtime": 1780010363.1978266,
+    "ast_hash": "4489095079f8ba63b352cd1de8244275",
+    "semantic_hash": "4489095079f8ba63b352cd1de8244275"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/memory/src/wiki.ts": {
+    "mtime": 1780010376.3949873,
+    "ast_hash": "7efb190428501c5079556b61f031d849",
+    "semantic_hash": "7efb190428501c5079556b61f031d849"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/memory/tsconfig.json": {
+    "mtime": 1780010355.6493423,
+    "ast_hash": "3b98d5af2cd00c7c4aacf745c8dbdbec",
+    "semantic_hash": "3b98d5af2cd00c7c4aacf745c8dbdbec"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/package.json": {
+    "mtime": 1779490125.3448727,
+    "ast_hash": "18756d5ed928bea07da1c978edbb1955",
+    "semantic_hash": "18756d5ed928bea07da1c978edbb1955"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/src/adapter.test.ts": {
+    "mtime": 1780620177.8922439,
+    "ast_hash": "4c15b7bcdd2c8919aaa487f630034c48",
+    "semantic_hash": "4c15b7bcdd2c8919aaa487f630034c48"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/src/adapter.ts": {
+    "mtime": 1780620148.3477578,
+    "ast_hash": "3e7905d5e12103ee2f211aa39722a520",
+    "semantic_hash": "3e7905d5e12103ee2f211aa39722a520"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/src/anthropic.ts": {
+    "mtime": 1780277067.4650764,
+    "ast_hash": "b3dd72c0d811b2c7682592e7cb2fc649",
+    "semantic_hash": "b3dd72c0d811b2c7682592e7cb2fc649"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/src/errors.ts": {
+    "mtime": 1779490141.050156,
+    "ast_hash": "e33f8fc4a62f67de1e07ab432d2a2842",
+    "semantic_hash": "e33f8fc4a62f67de1e07ab432d2a2842"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/src/gemini.ts": {
+    "mtime": 1780277067.4658127,
+    "ast_hash": "7d936b561e02c7031d76e177951adff0",
+    "semantic_hash": "7d936b561e02c7031d76e177951adff0"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/src/index.ts": {
+    "mtime": 1780277067.4666016,
+    "ast_hash": "535902acbd21192bf2d15da75e49ad66",
+    "semantic_hash": "535902acbd21192bf2d15da75e49ad66"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/src/logger.ts": {
+    "mtime": 1779490141.054302,
+    "ast_hash": "3f740fafc3f082bb574f07a3e8960796",
+    "semantic_hash": "3f740fafc3f082bb574f07a3e8960796"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/src/openai.ts": {
+    "mtime": 1780277067.4672117,
+    "ast_hash": "804d6dff2066dd26d36e2fed519653ca",
+    "semantic_hash": "804d6dff2066dd26d36e2fed519653ca"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/src/retry.test.ts": {
+    "mtime": 1779490141.0494795,
+    "ast_hash": "9ac53380e9aa561d0d7f429291ba7c95",
+    "semantic_hash": "9ac53380e9aa561d0d7f429291ba7c95"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/src/retry.ts": {
+    "mtime": 1779490141.0533216,
+    "ast_hash": "6d11650ae0c63032179ae96133f9fa2d",
+    "semantic_hash": "6d11650ae0c63032179ae96133f9fa2d"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/src/timeout.test.ts": {
+    "mtime": 1779490141.050801,
+    "ast_hash": "b6dc59200a196a05fae40f9ec7031fdd",
+    "semantic_hash": "b6dc59200a196a05fae40f9ec7031fdd"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/src/timeout.ts": {
+    "mtime": 1779490141.055285,
+    "ast_hash": "990320322516c434342e40a00e37bdb7",
+    "semantic_hash": "990320322516c434342e40a00e37bdb7"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/src/tool-types.ts": {
+    "mtime": 1779490141.0482655,
+    "ast_hash": "cfef143a5ce147d53f6a790b1d9c4ade",
+    "semantic_hash": "cfef143a5ce147d53f6a790b1d9c4ade"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/src/types.ts": {
+    "mtime": 1780277067.4677637,
+    "ast_hash": "ef81680a698909cc007772fc8cdec572",
+    "semantic_hash": "ef81680a698909cc007772fc8cdec572"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/model-providers/tsconfig.json": {
+    "mtime": 1779490131.0796037,
+    "ast_hash": "ed01ebb19c5d3b58dcb902584ec83f8f",
+    "semantic_hash": "ed01ebb19c5d3b58dcb902584ec83f8f"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/package.json": {
+    "mtime": 1780688689.7604375,
+    "ast_hash": "e3da6504ace7d35a55d9ffecb2a59311",
+    "semantic_hash": "e3da6504ace7d35a55d9ffecb2a59311"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/events.ts": {
+    "mtime": 1781383676.6143649,
+    "ast_hash": "43cc276a4c76f16b26859eb12f5b1cf7",
+    "semantic_hash": "43cc276a4c76f16b26859eb12f5b1cf7"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/index.ts": {
+    "mtime": 1781383688.320821,
+    "ast_hash": "56c2e77fe1353a178cf833e4ac06144f",
+    "semantic_hash": "56c2e77fe1353a178cf833e4ac06144f"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/runner.test.ts": {
+    "mtime": 1780089460.8413577,
+    "ast_hash": "cab56e145450cde4fc7313a6166a6d36",
+    "semantic_hash": "cab56e145450cde4fc7313a6166a6d36"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/runner.ts": {
+    "mtime": 1780277432.2507055,
+    "ast_hash": "a8ffa413a7942f058be1f04d486c92de",
+    "semantic_hash": "a8ffa413a7942f058be1f04d486c92de"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/session.ts": {
+    "mtime": 1780703059.9021232,
+    "ast_hash": "c164b9b6bd4c90aa6e208aacd55180ee",
+    "semantic_hash": "c164b9b6bd4c90aa6e208aacd55180ee"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/slad-runner.ts": {
+    "mtime": 1780277067.4685507,
+    "ast_hash": "eed0374fcad5c8a0c6749e4ce3f1c751",
+    "semantic_hash": "eed0374fcad5c8a0c6749e4ce3f1c751"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/slad.test.ts": {
+    "mtime": 1780703215.0185626,
+    "ast_hash": "294605258ff41b923d5bdef4a47de504",
+    "semantic_hash": "294605258ff41b923d5bdef4a47de504"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/slad.ts": {
+    "mtime": 1779776217.2330682,
+    "ast_hash": "9fbc837d8dbd0918f4a9bef0a49073cb",
+    "semantic_hash": "9fbc837d8dbd0918f4a9bef0a49073cb"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/stage.ts": {
+    "mtime": 1779720831.161541,
+    "ast_hash": "adc89d6ce8ce469237be3c4b4acdbd6e",
+    "semantic_hash": "adc89d6ce8ce469237be3c4b4acdbd6e"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/stages/explore.ts": {
+    "mtime": 1780011259.1659083,
+    "ast_hash": "acb655f2fe3c48caadcdeab8a9d7da9f",
+    "semantic_hash": "acb655f2fe3c48caadcdeab8a9d7da9f"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/stages/index.ts": {
+    "mtime": 1779786417.9520893,
+    "ast_hash": "8d11ff393128bbd47f2b8cc77bad794f",
+    "semantic_hash": "8d11ff393128bbd47f2b8cc77bad794f"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/stages/learn.ts": {
+    "mtime": 1780011306.5211499,
+    "ast_hash": "4dd02905c547f4e0304e65f7afc6073e",
+    "semantic_hash": "4dd02905c547f4e0304e65f7afc6073e"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/stages/plan.ts": {
+    "mtime": 1780011277.8822172,
+    "ast_hash": "6a19924d70e0983c36f71c8b87eba3e2",
+    "semantic_hash": "6a19924d70e0983c36f71c8b87eba3e2"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/stages/run.ts": {
+    "mtime": 1780277067.4692178,
+    "ast_hash": "8e6d83c191253efafc46e69d09ccefe9",
+    "semantic_hash": "8e6d83c191253efafc46e69d09ccefe9"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/stages/snapshot.ts": {
+    "mtime": 1780011270.170597,
+    "ast_hash": "262dd63ae82513da76d72fdcb481a534",
+    "semantic_hash": "262dd63ae82513da76d72fdcb481a534"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/stages/types.ts": {
+    "mtime": 1780277067.469916,
+    "ast_hash": "d2019c8771a523397f136b07ced904ab",
+    "semantic_hash": "d2019c8771a523397f136b07ced904ab"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/stages/util.ts": {
+    "mtime": 1779785486.9078693,
+    "ast_hash": "a695127258c4805962142d66ad027e43",
+    "semantic_hash": "a695127258c4805962142d66ad027e43"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/stages/with-debate.ts": {
+    "mtime": 1779786367.7318354,
+    "ast_hash": "bf2dcfe931aa09d3c700ba6b52b0d544",
+    "semantic_hash": "bf2dcfe931aa09d3c700ba6b52b0d544"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/src/types.ts": {
+    "mtime": 1780089368.469233,
+    "ast_hash": "70b0e7d4030647fa78b9c194a75c54e3",
+    "semantic_hash": "70b0e7d4030647fa78b9c194a75c54e3"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/tsconfig.json": {
+    "mtime": 1780011351.4242923,
+    "ast_hash": "34ea7e8ac1eb40c20610efb1cc96f669",
+    "semantic_hash": "34ea7e8ac1eb40c20610efb1cc96f669"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/shared/package.json": {
+    "mtime": 1778559506.447037,
+    "ast_hash": "0493f76152f8eb1060b6e0606f88edae",
+    "semantic_hash": "0493f76152f8eb1060b6e0606f88edae"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/shared/src/constants.ts": {
+    "mtime": 1780530198.496084,
+    "ast_hash": "cd355f0a889e2c0adec72c29f2e93106",
+    "semantic_hash": "cd355f0a889e2c0adec72c29f2e93106"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/shared/src/index.ts": {
+    "mtime": 1780455672.573662,
+    "ast_hash": "a4eefa12fab5b39c3cb2b9280487b8ca",
+    "semantic_hash": "a4eefa12fab5b39c3cb2b9280487b8ca"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/shared/src/schemas.test.ts": {
+    "mtime": 1781401182.079098,
+    "ast_hash": "4a9bf0f0f0860799e1173b1d8865189c",
+    "semantic_hash": "4a9bf0f0f0860799e1173b1d8865189c"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/shared/src/schemas.ts": {
+    "mtime": 1781400709.2694328,
+    "ast_hash": "3b27c8beface2e01e445bb5d0510f46a",
+    "semantic_hash": "3b27c8beface2e01e445bb5d0510f46a"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/shared/tsconfig.json": {
+    "mtime": 1778559506.608177,
+    "ast_hash": "4bcf617204e617a3a75e1cfe1bb9af94",
+    "semantic_hash": "4bcf617204e617a3a75e1cfe1bb9af94"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/telemetry/package.json": {
+    "mtime": 1780010381.7987993,
+    "ast_hash": "30099767ce07bb37712579a2aac8fcf2",
+    "semantic_hash": "30099767ce07bb37712579a2aac8fcf2"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/telemetry/src/index.ts": {
+    "mtime": 1780010407.2493358,
+    "ast_hash": "256cc3a075e9a637cfb483ade04f0796",
+    "semantic_hash": "256cc3a075e9a637cfb483ade04f0796"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/telemetry/src/ldjson.ts": {
+    "mtime": 1780010404.4468234,
+    "ast_hash": "39e79a8b160c39ecef4c10fdf0b44399",
+    "semantic_hash": "39e79a8b160c39ecef4c10fdf0b44399"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/telemetry/src/noop.ts": {
+    "mtime": 1780010397.1921096,
+    "ast_hash": "5320433517d3af3c831f2193f1a6192f",
+    "semantic_hash": "5320433517d3af3c831f2193f1a6192f"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/telemetry/src/telemetry.test.ts": {
+    "mtime": 1780010430.5479267,
+    "ast_hash": "9db27e6c1897a227b519dfb45d34054f",
+    "semantic_hash": "9db27e6c1897a227b519dfb45d34054f"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/telemetry/src/types.ts": {
+    "mtime": 1780010388.8019407,
+    "ast_hash": "eb43bbd948f6860b3e1b969815817572",
+    "semantic_hash": "eb43bbd948f6860b3e1b969815817572"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/telemetry/tsconfig.json": {
+    "mtime": 1780010384.7075233,
+    "ast_hash": "3b98d5af2cd00c7c4aacf745c8dbdbec",
+    "semantic_hash": "3b98d5af2cd00c7c4aacf745c8dbdbec"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/package.json": {
+    "mtime": 1779670578.8487053,
+    "ast_hash": "5417977fe832995ce56feeb539f1981f",
+    "semantic_hash": "5417977fe832995ce56feeb539f1981f"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/adapters.ts": {
+    "mtime": 1779670435.7527652,
+    "ast_hash": "f2e4cb429905f2159379c8e89bac7a21",
+    "semantic_hash": "f2e4cb429905f2159379c8e89bac7a21"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/builtin-tools.ts": {
+    "mtime": 1780008435.0781944,
+    "ast_hash": "1aac0c9ee169a0b9ec62b12256e2198a",
+    "semantic_hash": "1aac0c9ee169a0b9ec62b12256e2198a"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/classifier.ts": {
+    "mtime": 1779670244.2732687,
+    "ast_hash": "29d72b2317d2deca9902449ce6d0098d",
+    "semantic_hash": "29d72b2317d2deca9902449ce6d0098d"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/context.ts": {
+    "mtime": 1780008375.6332676,
+    "ast_hash": "a0fed8ad2fb9e1f16495dea3fc565c60",
+    "semantic_hash": "a0fed8ad2fb9e1f16495dea3fc565c60"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/define-tool.ts": {
+    "mtime": 1780008339.1366165,
+    "ast_hash": "b956367cfe7b3df5778355599d82049b",
+    "semantic_hash": "b956367cfe7b3df5778355599d82049b"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/definitions/filesystem.test.ts": {
+    "mtime": 1779670281.6000447,
+    "ast_hash": "9bd8717075a1a8f87994f48c9b62ac72",
+    "semantic_hash": "9bd8717075a1a8f87994f48c9b62ac72"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/definitions/filesystem.ts": {
+    "mtime": 1779670488.1724195,
+    "ast_hash": "d3143f50263b7d778e6110069bc4d289",
+    "semantic_hash": "d3143f50263b7d778e6110069bc4d289"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/definitions/git.ts": {
+    "mtime": 1779670390.2015789,
+    "ast_hash": "ce55ed854ab3b04451636acf1ab61075",
+    "semantic_hash": "ce55ed854ab3b04451636acf1ab61075"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/definitions/shell.test.ts": {
+    "mtime": 1779670282.1131964,
+    "ast_hash": "43381c52dd63ae05b762ac67725c181b",
+    "semantic_hash": "43381c52dd63ae05b762ac67725c181b"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/definitions/shell.ts": {
+    "mtime": 1779670494.2920835,
+    "ast_hash": "61a723dafd878ec5bcda05710b8c4714",
+    "semantic_hash": "61a723dafd878ec5bcda05710b8c4714"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/executor.test.ts": {
+    "mtime": 1780009614.1008348,
+    "ast_hash": "589f1210e3360c380f5f715262dc9024",
+    "semantic_hash": "589f1210e3360c380f5f715262dc9024"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/executor.ts": {
+    "mtime": 1779670761.9959197,
+    "ast_hash": "1e7c865de2ee13bf56d96529d2aaa400",
+    "semantic_hash": "1e7c865de2ee13bf56d96529d2aaa400"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/filesystem.ts": {
+    "mtime": 1779670313.1807344,
+    "ast_hash": "19626254c946a257b07d7d1d2afbbeca",
+    "semantic_hash": "19626254c946a257b07d7d1d2afbbeca"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/git.ts": {
+    "mtime": 1779670314.516235,
+    "ast_hash": "79486d409fc63b914fc2b00f74feb47b",
+    "semantic_hash": "79486d409fc63b914fc2b00f74feb47b"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/index.ts": {
+    "mtime": 1780008476.025419,
+    "ast_hash": "4f7034fcda4c0012aa96604ab3930d5c",
+    "semantic_hash": "4f7034fcda4c0012aa96604ab3930d5c"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/interfaces.test.ts": {
+    "mtime": 1780009623.4973805,
+    "ast_hash": "b164fa6c759a96002c57451b08125d9a",
+    "semantic_hash": "b164fa6c759a96002c57451b08125d9a"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/io.ts": {
+    "mtime": 1779670311.9676716,
+    "ast_hash": "cf4da3b7eab72a726bb0e9567db48748",
+    "semantic_hash": "cf4da3b7eab72a726bb0e9567db48748"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/io/filesystem.ts": {
+    "mtime": 1779670435.5732472,
+    "ast_hash": "21b9ffb8f798b17a39208b2b139b70a9",
+    "semantic_hash": "21b9ffb8f798b17a39208b2b139b70a9"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/io/shell.ts": {
+    "mtime": 1779670435.0185614,
+    "ast_hash": "cdcacd4bcd635abf5f7ef42f331eced2",
+    "semantic_hash": "cdcacd4bcd635abf5f7ef42f331eced2"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/registry.ts": {
+    "mtime": 1780009601.5845714,
+    "ast_hash": "61835dd9c89064ade5f0d0897c481af2",
+    "semantic_hash": "61835dd9c89064ade5f0d0897c481af2"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/shell.ts": {
+    "mtime": 1779670313.8616364,
+    "ast_hash": "588c917ff3f32ebb2c0835cec956e676",
+    "semantic_hash": "588c917ff3f32ebb2c0835cec956e676"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/src/types.ts": {
+    "mtime": 1779670434.1285393,
+    "ast_hash": "e739756d8f75f796c913841a629586af",
+    "semantic_hash": "e739756d8f75f796c913841a629586af"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/tools/tsconfig.json": {
+    "mtime": 1779670239.4270601,
+    "ast_hash": "ed01ebb19c5d3b58dcb902584ec83f8f",
+    "semantic_hash": "ed01ebb19c5d3b58dcb902584ec83f8f"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/eslint.config.mjs": {
+    "mtime": 1778521774.0,
+    "ast_hash": "dfa1f5f6a7037bf39dc510f30b180002",
+    "semantic_hash": "dfa1f5f6a7037bf39dc510f30b180002"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/next-env.d.ts": {
+    "mtime": 1778792692.0047774,
+    "ast_hash": "2a74d3909800ca5467fa83b0ab4a4890",
+    "semantic_hash": "2a74d3909800ca5467fa83b0ab4a4890"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/next.config.ts": {
+    "mtime": 1780277067.4728918,
+    "ast_hash": "4adf6f23a8e43e8e4e9f932765d39d25",
+    "semantic_hash": "4adf6f23a8e43e8e4e9f932765d39d25"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/package.json": {
+    "mtime": 1780093746.670215,
+    "ast_hash": "53b83bcf1b0692efe147dc1c1eebf6aa",
+    "semantic_hash": "53b83bcf1b0692efe147dc1c1eebf6aa"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/api/evolve/apply/route.ts": {
+    "mtime": 1778713697.7797034,
+    "ast_hash": "e58a8821a1cdd711a9640b020d4abc9c",
+    "semantic_hash": "e58a8821a1cdd711a9640b020d4abc9c"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/api/hitl/answers/route.ts": {
+    "mtime": 1780688692.4643137,
+    "ast_hash": "858e6cecb005efc714c82f485177165e",
+    "semantic_hash": "858e6cecb005efc714c82f485177165e"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/api/pipeline/cancel/route.ts": {
+    "mtime": 1778646367.294975,
+    "ast_hash": "74e65091a6daaa7ae8ac6df21877ac49",
+    "semantic_hash": "74e65091a6daaa7ae8ac6df21877ac49"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/api/pipeline/logs/route.ts": {
+    "mtime": 1778561513.3163474,
+    "ast_hash": "f36f6962175fce27316a1cd3065e02fe",
+    "semantic_hash": "f36f6962175fce27316a1cd3065e02fe"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/api/pipeline/run/route.ts": {
+    "mtime": 1780688691.9226632,
+    "ast_hash": "f11d6b0a075d73723c6811e676eb421a",
+    "semantic_hash": "f11d6b0a075d73723c6811e676eb421a"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/api/pipeline/work/route.ts": {
+    "mtime": 1780688693.0032544,
+    "ast_hash": "f0f96f3d91fa3fb0d6ed0caf0ce7aa38",
+    "semantic_hash": "f0f96f3d91fa3fb0d6ed0caf0ce7aa38"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/api/providers/route.ts": {
+    "mtime": 1778643642.349778,
+    "ast_hash": "90fb821d08a1f80ea83c96ea73c72d5e",
+    "semantic_hash": "90fb821d08a1f80ea83c96ea73c72d5e"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/api/sessions/[id]/archive/route.ts": {
+    "mtime": 1778727350.6048927,
+    "ast_hash": "ac2f2c4e15b2e4ef93baac15104aad84",
+    "semantic_hash": "ac2f2c4e15b2e4ef93baac15104aad84"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/api/sessions/route.ts": {
+    "mtime": 1778728521.763196,
+    "ast_hash": "8db54828c9662bcc48ea98bc70897b6a",
+    "semantic_hash": "8db54828c9662bcc48ea98bc70897b6a"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/api/settings/route.ts": {
+    "mtime": 1778733569.1350589,
+    "ast_hash": "9821f08653b91ac3b3df9917753fe708",
+    "semantic_hash": "9821f08653b91ac3b3df9917753fe708"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/api/settings/validate/route.ts": {
+    "mtime": 1778733416.4084206,
+    "ast_hash": "89c059c98b1b39ff349a47d19941445c",
+    "semantic_hash": "89c059c98b1b39ff349a47d19941445c"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/api/workspace/browse/route.ts": {
+    "mtime": 1778728617.5320728,
+    "ast_hash": "fbe5b373874b4d7520dadf1ea23225b1",
+    "semantic_hash": "fbe5b373874b4d7520dadf1ea23225b1"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/api/workspace/route.ts": {
+    "mtime": 1778713689.6503503,
+    "ast_hash": "6009640aded1a9c001e10f88e5225087",
+    "semantic_hash": "6009640aded1a9c001e10f88e5225087"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/layout.tsx": {
+    "mtime": 1778521898.0,
+    "ast_hash": "22546220bd0ea3c0afa6ceaf44a7f11e",
+    "semantic_hash": "22546220bd0ea3c0afa6ceaf44a7f11e"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/app/page.tsx": {
+    "mtime": 1778521898.0,
+    "ast_hash": "aec5d60f75cc820419b6461254a2b5af",
+    "semantic_hash": "aec5d60f75cc820419b6461254a2b5af"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/components/app.tsx": {
+    "mtime": 1780277067.474786,
+    "ast_hash": "c0a941a8e0831ec9539230db5fa90725",
+    "semantic_hash": "c0a941a8e0831ec9539230db5fa90725"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/components/artifact-panel.tsx": {
+    "mtime": 1778771891.2350457,
+    "ast_hash": "dcd829382c7eb65aca81eb9786ef3056",
+    "semantic_hash": "dcd829382c7eb65aca81eb9786ef3056"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/components/components.tsx": {
+    "mtime": 1778771822.2975996,
+    "ast_hash": "af503b37cf400b82d776f655d281dfa2",
+    "semantic_hash": "af503b37cf400b82d776f655d281dfa2"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/components/settings-modal.tsx": {
+    "mtime": 1778733651.8787212,
+    "ast_hash": "9c196d18945dece6468cf61f2c120f21",
+    "semantic_hash": "9c196d18945dece6468cf61f2c120f21"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/components/sidebar.tsx": {
+    "mtime": 1778792088.677613,
+    "ast_hash": "0d32350c7ce8046dfc11579beca91cb5",
+    "semantic_hash": "0d32350c7ce8046dfc11579beca91cb5"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/components/stage-view.tsx": {
+    "mtime": 1780277067.4760063,
+    "ast_hash": "1c9e5afb4ee0e41be998d440be8c8260",
+    "semantic_hash": "1c9e5afb4ee0e41be998d440be8c8260"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/components/tweaks-panel.tsx": {
+    "mtime": 1778771920.4548333,
+    "ast_hash": "c30f6107f213f16f3940ae4f3c3551f0",
+    "semantic_hash": "c30f6107f213f16f3940ae4f3c3551f0"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/lib/config.ts": {
+    "mtime": 1778770699.3384295,
+    "ast_hash": "49d628e5c884667485b9f761d7c77265",
+    "semantic_hash": "49d628e5c884667485b9f761d7c77265"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/lib/session-files.ts": {
+    "mtime": 1780688690.300483,
+    "ast_hash": "47a3b354e00310a9d25e0c168fc170ee",
+    "semantic_hash": "47a3b354e00310a9d25e0c168fc170ee"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/lib/settings.ts": {
+    "mtime": 1779721194.4788942,
+    "ast_hash": "45500570a2d22df5af14df5108e0db22",
+    "semantic_hash": "45500570a2d22df5af14df5108e0db22"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/lib/slad-jobs.ts": {
+    "mtime": 1780688690.838574,
+    "ast_hash": "7228d2ded14da620e9ef4d2954fcd698",
+    "semantic_hash": "7228d2ded14da620e9ef4d2954fcd698"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/lib/slad-server.ts": {
+    "mtime": 1780688700.2764614,
+    "ast_hash": "63750610e81af28eb992d694cbc8f0d1",
+    "semantic_hash": "63750610e81af28eb992d694cbc8f0d1"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/lib/slash-commands.ts": {
+    "mtime": 1780277067.4766924,
+    "ast_hash": "0a81b2af59d82bf58bc7fcfbacb9d3eb",
+    "semantic_hash": "0a81b2af59d82bf58bc7fcfbacb9d3eb"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/src/lib/types.ts": {
+    "mtime": 1780688691.3866174,
+    "ast_hash": "37a9905abb18d54059ccbae66cf9afbf",
+    "semantic_hash": "37a9905abb18d54059ccbae66cf9afbf"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/tsconfig.json": {
+    "mtime": 1778560172.7960768,
+    "ast_hash": "b400aa3989d1ca4e7b0363f77e9ab54d",
+    "semantic_hash": "b400aa3989d1ca4e7b0363f77e9ab54d"
+  },
+  "/Users/christopheraravena/Projects/slad/tsconfig.base.json": {
+    "mtime": 1778559505.9533195,
+    "ast_hash": "cfd7cb5f24f82870cd4a6b8d22859e34",
+    "semantic_hash": "cfd7cb5f24f82870cd4a6b8d22859e34"
+  },
+  "/Users/christopheraravena/Projects/slad/turbo.json": {
+    "mtime": 1779670956.0671344,
+    "ast_hash": "57924b9e516ec7cbc01b9b92d10c4750",
+    "semantic_hash": "57924b9e516ec7cbc01b9b92d10c4750"
+  },
+  "/Users/christopheraravena/Projects/slad/AGENTS.md": {
+    "mtime": 1778559900.320461,
+    "ast_hash": "f90415eb620a4e07eb8ab3d58d33d91d",
+    "semantic_hash": "f90415eb620a4e07eb8ab3d58d33d91d"
+  },
+  "/Users/christopheraravena/Projects/slad/CLAUDE.md": {
+    "mtime": 1778559900.146814,
+    "ast_hash": "e6f1e602d750e689ac2a12d35d12dc8b",
+    "semantic_hash": "e6f1e602d750e689ac2a12d35d12dc8b"
+  },
+  "/Users/christopheraravena/Projects/slad/README.md": {
+    "mtime": 1780012101.8682983,
+    "ast_hash": "031a90bab8701fa1843572dce024a7f6",
+    "semantic_hash": "031a90bab8701fa1843572dce024a7f6"
+  },
+  "/Users/christopheraravena/Projects/slad/apps/dashboard/README.md": {
+    "mtime": 1781384231.1521904,
+    "ast_hash": "46340e303b28cc248c8d8e23edbc2a01",
+    "semantic_hash": "46340e303b28cc248c8d8e23edbc2a01"
+  },
+  "/Users/christopheraravena/Projects/slad/blueprints/agents/basic-agent/README.md": {
+    "mtime": 1781383898.8559892,
+    "ast_hash": "33ec7408ba38499880c69cf5b346b9f0",
+    "semantic_hash": "33ec7408ba38499880c69cf5b346b9f0"
+  },
+  "/Users/christopheraravena/Projects/slad/blueprints/agents/enterprise/README.md": {
+    "mtime": 1781383952.6120532,
+    "ast_hash": "28ef0cde5647ab7ab9f8288410fcbb65",
+    "semantic_hash": "28ef0cde5647ab7ab9f8288410fcbb65"
+  },
+  "/Users/christopheraravena/Projects/slad/examples/research-agent/README.md": {
+    "mtime": 1781383587.2969723,
+    "ast_hash": "93fa54e94083035f3e525ede90784a17",
+    "semantic_hash": "93fa54e94083035f3e525ede90784a17"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/AGENTS.md": {
+    "mtime": 1778559901.1238368,
+    "ast_hash": "cc8b7aebae091b93c68f76185fb7cd7c",
+    "semantic_hash": "cc8b7aebae091b93c68f76185fb7cd7c"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/CLAUDE.md": {
+    "mtime": 1778559900.7279913,
+    "ast_hash": "37f3af67b114bc895c9b6ea010571ec8",
+    "semantic_hash": "37f3af67b114bc895c9b6ea010571ec8"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/README.md": {
+    "mtime": 1778640758.0543387,
+    "ast_hash": "95637c126a4a72b64fe23eb83a9528f3",
+    "semantic_hash": "95637c126a4a72b64fe23eb83a9528f3"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/demo/README.md": {
+    "mtime": 1781388997.2439883,
+    "ast_hash": "50278e8a0100397bd0d8468e24eb5496",
+    "semantic_hash": "50278e8a0100397bd0d8468e24eb5496"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/roadmap.md": {
+    "mtime": 1778555113.0,
+    "ast_hash": "d4a734c349ac0718f566b8c1731cd13d",
+    "semantic_hash": "d4a734c349ac0718f566b8c1731cd13d"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/cli/src/templates/snapshot.md": {
+    "mtime": 1776815729.0,
+    "ast_hash": "36b2bb0ceb28aad68cc78281be660cd6",
+    "semantic_hash": "36b2bb0ceb28aad68cc78281be660cd6"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/pipeline/README.md": {
+    "mtime": 1779720948.64839,
+    "ast_hash": "2b8fd0d7cbc0ee048980ad8e77018b17",
+    "semantic_hash": "2b8fd0d7cbc0ee048980ad8e77018b17"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/AGENTS.md": {
+    "mtime": 1778521820.0,
+    "ast_hash": "9e09241799026ac05be315a2f0b50055",
+    "semantic_hash": "9e09241799026ac05be315a2f0b50055"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/CLAUDE.md": {
+    "mtime": 1778560172.9624739,
+    "ast_hash": "30803eab24bcfdaf81fba1f09527a08e",
+    "semantic_hash": "30803eab24bcfdaf81fba1f09527a08e"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/README.md": {
+    "mtime": 1778521774.0,
+    "ast_hash": "f15aaa42d5d299d091b1171097ea56ad",
+    "semantic_hash": "f15aaa42d5d299d091b1171097ea56ad"
+  },
+  "/Users/christopheraravena/Projects/slad/pnpm-workspace.yaml": {
+    "mtime": 1781377301.7223606,
+    "ast_hash": "9865f548d69956385b5f46043caecad0",
+    "semantic_hash": "9865f548d69956385b5f46043caecad0"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/public/file.svg": {
+    "mtime": 1778521774.0,
+    "ast_hash": "d09f95206c3fa0bb9bd9fefabfd0ea71",
+    "semantic_hash": "d09f95206c3fa0bb9bd9fefabfd0ea71"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/public/globe.svg": {
+    "mtime": 1778521774.0,
+    "ast_hash": "2aaafa6a49b6563925fe440891e32717",
+    "semantic_hash": "2aaafa6a49b6563925fe440891e32717"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/public/next.svg": {
+    "mtime": 1778521774.0,
+    "ast_hash": "8e061864f388b47f33a1c3780831193e",
+    "semantic_hash": "8e061864f388b47f33a1c3780831193e"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/public/vercel.svg": {
+    "mtime": 1778521774.0,
+    "ast_hash": "c0af2f507b369b085b35ef4bbe3bcf1e",
+    "semantic_hash": "c0af2f507b369b085b35ef4bbe3bcf1e"
+  },
+  "/Users/christopheraravena/Projects/slad/packages/ui/public/window.svg": {
+    "mtime": 1778521774.0,
+    "ast_hash": "a2760511c65806022ad20adf74370ff3",
+    "semantic_hash": "a2760511c65806022ad20adf74370ff3"
+  }
+}
