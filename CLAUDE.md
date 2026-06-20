@@ -6,7 +6,6 @@ SLAD is a pnpm workspace with Turborepo orchestration.
 
 - `packages/shared` (`@slad/shared`): Zod schemas, shared TypeScript types, and constants for the SLAD pipeline.
 - `packages/cli` (`@slad/cli`): CLI orchestrator for `explore -> snapshot -> plan -> run -> learn -> evolve`.
-- `packages/ui` (`@slad/ui`): Next.js dashboard consuming shared contracts plus UI-specific display types.
 
 ## Commands
 
@@ -16,7 +15,6 @@ corepack pnpm build
 corepack pnpm typecheck
 corepack pnpm test
 corepack pnpm dev:cli -- explore "intencion"
-corepack pnpm dev:ui
 corepack pnpm --filter @slad/cli test
 ```
 
@@ -24,6 +22,5 @@ corepack pnpm --filter @slad/cli test
 
 - Shared serializable contracts live in `packages/shared/src`, not in `packages/cli/src/core/types.ts`.
 - `packages/cli/src/core/types.ts` is a compatibility bridge: it re-exports shared schemas and keeps CLI-only runtime/config schemas.
-- UI dashboard display-only fields belong in `packages/ui/src/lib/types.ts`; do not force mock dashboard metadata into `SessionState`.
 - Workspace dependencies use `workspace:*`.
 - Turbo builds `@slad/shared` before packages that depend on it.

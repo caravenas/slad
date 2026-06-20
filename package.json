@@ -4,9 +4,8 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "build": "turbo run build",
-    "dev": "pnpm dev:ui",
+    "dev": "pnpm dev:cli",
     "dev:cli": "pnpm --filter @slad/cli dev",
-    "dev:ui": "pnpm --filter @slad/ui dev",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean",
