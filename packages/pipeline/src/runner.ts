@@ -41,9 +41,9 @@ export async function runPipeline<Input = unknown, Output = unknown, Services ex
   // Dynamic imports — keeps Turbopack from statically bundling Node.js-only packages
   // when @slad/pipeline is consumed from the Next.js UI
   const [{ NoopTelemetry }, { ToolRegistry }, { BudgetTracker }] = await Promise.all([
-    import("@slad/telemetry"),
+    import("./telemetry/index.js"),
     import("@slad/tools"),
-    import("@slad/context-budget"),
+    import("./budget/index.js"),
   ]);
 
   // Build shared context helpers

@@ -15,15 +15,10 @@ This is a pnpm + Turborepo monorepo.
 | `@slad/shared` | Zod schemas, granular `Permission` type, serializable contracts |
 | `@slad/model-providers` | Provider abstraction (Anthropic, OpenAI, Google) + `ModelAdapter` (`generateObject` / `generateText` with auto-fix JSON) |
 | `@slad/tools` | `defineTool()`, `ToolRegistry`, 9 builtin tools (`fs.readFile`, `shell.exec`, …) |
-| `@slad/harness` | Execution harness: command classification, hooks, audit, `assertPermission()` |
+| `@slad/harness` | Execution harness: command classification, hooks, LDJSON audit log, `assertPermission()` |
 | `@slad/hitl` | Human-in-the-loop transports (TTY, none) |
 | `@slad/cache` | Stage output cache (`CacheStore`) |
-| `@slad/audit-log` | LDJSON audit log writer |
-| `@slad/context-budget` | Token/cost budget tracking |
-| `@slad/memory` | `MemoryProvider`: `InMemoryProvider`, `WikiMemoryProvider` |
-| `@slad/telemetry` | `TelemetryProvider`: `NoopTelemetry`, `LDJSONTelemetry` |
-| `@slad/pipeline` | `defineStage`, `runPipeline`, `buildSladPipeline`, the 5 SLAD stages |
-| `@slad/agent` | `createAgent({ model, tools, memory, telemetry, pipeline })` |
+| `@slad/pipeline` | `defineStage`, `runPipeline`, `buildSladPipeline`, the 5 SLAD stages, `createAgent()`, memory/telemetry providers, budget tracking |
 | `@slad/cli` | `slad` CLI orchestrator |
 
 Turbo builds `@slad/shared` first, then dependents in topological order.
@@ -102,7 +97,7 @@ The CLI is just one consumer. You can embed SLAD in your own code via `@slad/age
 
 ```ts
 import { buildSladPipeline } from "@slad/pipeline";
-import { createAgent } from "@slad/agent";
+import { createAgent } from "@slad/pipeline";
 import { getProvider } from "@slad/model-providers";
 import { createHarness } from "@slad/harness";
 import { createHitlTransport } from "@slad/hitl";
@@ -192,8 +187,8 @@ Compose stages into a pipeline yourself with `runPipeline()` if you don't want t
 ### Inject memory and telemetry
 
 ```ts
-import { WikiMemoryProvider } from "@slad/memory";
-import { LDJSONTelemetry } from "@slad/telemetry";
+import { WikiMemoryProvider } from "@slad/pipeline";
+import { LDJSONTelemetry } from "@slad/pipeline";
 
 const agent = createAgent({
   model: provider,

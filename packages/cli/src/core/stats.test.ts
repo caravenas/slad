@@ -178,7 +178,7 @@ test("summarizeTelemetry: computes average duration", () => {
 test("getProjectStats includes budget totals from budget-history.jsonl", async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "slad-stats-budget-"));
   try {
-    const { appendBudgetHistory } = await import("@slad/context-budget");
+    const { appendBudgetHistory } = await import("@slad/pipeline");
     appendBudgetHistory({
       sessionId: "s1", intent: "x", startedAt: "2026-01-01T00:00:00Z",
       completedAt: "2026-01-01T00:01:00Z", model: "m", provider: "p",

@@ -7,18 +7,13 @@ SLAD is a pnpm workspace with Turborepo orchestration.
 - `packages/shared` (`@slad/shared`): Zod schemas, shared TypeScript types, and constants for the SLAD pipeline.
 - `packages/model-providers` (`@slad/model-providers`): `ModelProvider` abstraction + `ModelAdapter` (`generateObject` / `generateText`).
 - `packages/tools` (`@slad/tools`): `defineTool()`, `ToolRegistry`, builtin tools.
-- `packages/harness` (`@slad/harness`): execution harness — command classification, hooks, `assertPermission()`.
+- `packages/harness` (`@slad/harness`): execution harness — command classification, hooks, `assertPermission()`, LDJSON audit log.
 - `packages/hitl` (`@slad/hitl`): human-in-the-loop transports (TTY, none).
 - `packages/cache` (`@slad/cache`): stage output cache.
-- `packages/audit-log` (`@slad/audit-log`): LDJSON audit log writer.
-- `packages/context-budget` (`@slad/context-budget`): token/cost budget tracking.
-- `packages/memory` (`@slad/memory`): `MemoryProvider` implementations.
-- `packages/telemetry` (`@slad/telemetry`): `TelemetryProvider` implementations.
-- `packages/pipeline` (`@slad/pipeline`): `defineStage`, `runPipeline`, `buildSladPipeline`, the SLAD stages.
-- `packages/agent` (`@slad/agent`): `createAgent()` façade over pipeline + providers.
+- `packages/pipeline` (`@slad/pipeline`): `defineStage`, `runPipeline`, `buildSladPipeline`, the SLAD stages, `createAgent()`, memory/telemetry providers, budget tracking.
 - `packages/cli` (`@slad/cli`): CLI orchestrator for `explore -> snapshot -> plan -> run -> learn -> evolve`.
 
-`apps/dashboard` and `apps/docs` are demo stubs; `examples/research-agent` shows SDK usage; `blueprints/` backs `slad create`.
+`examples/research-agent` shows SDK usage; `blueprints/` backs `slad create`.
 
 ## Commands
 

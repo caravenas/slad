@@ -6,3 +6,7 @@ export * from "./session.js";
 export * from "./slad.js";
 export * from "./stages/index.js";
 export * from "./slad-runner.js";
+export * from "./memory/index.js";
+export * from "./telemetry/index.js";
+export * from "./budget/index.js";
+export * from "./agent.js";

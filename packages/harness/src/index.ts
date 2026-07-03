@@ -1,5 +1,5 @@
 import path from "node:path";
-import { AuditLogger } from "@slad/audit-log";
+import { AuditLogger } from "./audit.js";
 import type { PlanTask, RunOutput, Permission } from "@slad/shared";
 import { granularToLegacy } from "@slad/shared";
 import { classifyRunOutput, highestLevel } from "./classifier.js";

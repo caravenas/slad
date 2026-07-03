@@ -1,7 +1,7 @@
 import ora from "ora";
 import kleur from "kleur";
 import { type SladPipelineStageId, buildSladPipeline, writeAutoReport } from "@slad/pipeline";
-import { createAgent } from "@slad/agent";
+import { createAgent } from "@slad/pipeline";
 import { getApiKey, getModel, loadConfig, resolveProvider } from "../core/config.js";
 import { type ModelProvider } from "@slad/model-providers";
 import { getSladProvider } from "../core/providers.js";
@@ -18,7 +18,7 @@ import {
 import { getActiveAgent } from "../agents/registry.js";
 import { writeArtifact, readArtifact } from "../persistence/index.js";
 import { getOrCreateSession, getActiveSession, appendArtifact, saveSession } from "../core/session.js";
-import { appendBudgetHistory } from "@slad/context-budget";
+import { appendBudgetHistory } from "@slad/pipeline";
 import { getDocsRoot } from "../persistence/layout.js";
 import { ProviderError } from "../core/errors.js";
 import { classifyIntent } from "../core/classifier.js";

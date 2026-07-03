@@ -8,7 +8,6 @@
     "start": "node --import tsx/esm agents/demo.agent.ts"
   },
   "dependencies": {
-    "@slad/agent": "^0.1.0",
     "@slad/pipeline": "^0.1.0",
     "@slad/tools": "^0.1.0",
     "@slad/model-providers": "^0.1.0",

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createAgent } from "@slad/agent";
+import { createAgent } from "@slad/pipeline";
 import { definePipeline, defineStage } from "@slad/pipeline";
 import type { ModelProvider } from "@slad/model-providers";
 

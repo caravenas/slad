@@ -1,4 +1,4 @@
-import { createAgent, type Agent } from "@slad/agent";
+import { createAgent, type Agent } from "@slad/pipeline";
 import { createHarness, HarnessConfig } from "@slad/harness";
 import { researchPipeline } from "./pipeline.js";
 import { createMockResearchProvider } from "./mock-provider.js";

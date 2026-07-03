@@ -287,7 +287,7 @@ describe("pipeline stop behavior", () => {
 describe("onUsage callback (BudgetTracker integration)", () => {
   it("record acumula tokens al llamar onUsage", async () => {
     // Dinámica: importar BudgetTracker directamente para verificar la integración
-    const { BudgetTracker } = await import("@slad/context-budget");
+    const { BudgetTracker } = await import("@slad/pipeline");
     const budget = new BudgetTracker("gpt-4o");
 
     // Simular cómo auto.ts crea el callback

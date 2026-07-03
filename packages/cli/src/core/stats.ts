@@ -1,6 +1,6 @@
 import { listSessions } from "./session.js";
 import type { SessionState } from "./types.js";
-import { readBudgetHistory, summarizeBudgetHistory } from "@slad/context-budget";
+import { readBudgetHistory, summarizeBudgetHistory } from "@slad/pipeline";
 export { summarizeTelemetry, type TelemetryStats } from "@slad/pipeline";
 
 export type ProjectStats = {

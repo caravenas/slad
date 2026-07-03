@@ -17,9 +17,6 @@ importers:
 
   examples/research-agent:
     dependencies:
-      '@slad/agent':
-        specifier: workspace:*
-        version: link:../../packages/agent
       '@slad/harness':
         specifier: workspace:*
         version: link:../../packages/harness
@@ -46,62 +43,6 @@ importers:
         specifier: 5.6.3
         version: 5.6.3
 
-  packages/agent:
-    dependencies:
-      '@slad/cache':
-        specifier: workspace:*
-        version: link:../cache
-      '@slad/harness':
-        specifier: workspace:*
-        version: link:../harness
-      '@slad/hitl':
-        specifier: workspace:*
-        version: link:../hitl
-      '@slad/memory':
-        specifier: workspace:*
-        version: link:../memory
-      '@slad/model-providers':
-        specifier: workspace:*
-        version: link:../model-providers
-      '@slad/pipeline':
-        specifier: workspace:*
-        version: link:../pipeline
-      '@slad/shared':
-        specifier: workspace:*
-        version: link:../shared
-      '@slad/telemetry':
-        specifier: workspace:*
-        version: link:../telemetry
-      '@slad/tools':
-        specifier: workspace:*
-        version: link:../tools
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.1
-        version: 22.19.19
-      tsx:
-        specifier: ^4.19.2
-        version: 4.21.0
-      typescript:
-        specifier: 5.6.3
-        version: 5.6.3
-
-  packages/audit-log:
-    dependencies:
-      '@slad/shared':
-        specifier: workspace:*
-        version: link:../shared
-    devDependencies:
-      '@types/node':
-        specifier: ^22.7.0
-        version: 22.19.19
-      tsx:
-        specifier: ^4.19.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-
   packages/cache:
     dependencies:
       '@slad/shared':
@@ -123,18 +64,9 @@ importers:
       '@inquirer/prompts':
         specifier: ^8.4.2
         version: 8.4.3(@types/node@22.19.19)
-      '@slad/agent':
-        specifier: workspace:*
-        version: link:../agent
-      '@slad/audit-log':
-        specifier: workspace:*
-        version: link:../audit-log
       '@slad/cache':
         specifier: workspace:*
         version: link:../cache
-      '@slad/context-budget':
-        specifier: workspace:*
-        version: link:../context-budget
       '@slad/harness':
         specifier: workspace:*
         version: link:../harness
@@ -182,33 +114,11 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
-  packages/context-budget:
-    dependencies:
-      '@slad/shared':
-        specifier: workspace:*
-        version: link:../shared
-      zod:
-        specifier: ^3.23.8
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: ^22.7.0
-        version: 22.19.19
-      tsx:
-        specifier: ^4.19.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-
   packages/harness:
     dependencies:
       '@inquirer/prompts':
         specifier: ^8.4.2
         version: 8.4.3(@types/node@22.19.19)
-      '@slad/audit-log':
-        specifier: workspace:*
-        version: link:../audit-log
       '@slad/shared':
         specifier: workspace:*
         version: link:../shared
@@ -254,18 +164,6 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
-  packages/memory:
-    devDependencies:
-      '@types/node':
-        specifier: ^22.7.0
-        version: 22.19.19
-      tsx:
-        specifier: ^4.19.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.6.0
-        version: 5.6.3
-
   packages/model-providers:
     dependencies:
       '@anthropic-ai/sdk':
@@ -299,27 +197,18 @@ importers:
       '@slad/cache':
         specifier: workspace:*
         version: link:../cache
-      '@slad/context-budget':
-        specifier: workspace:*
-        version: link:../context-budget
       '@slad/harness':
         specifier: workspace:*
         version: link:../harness
       '@slad/hitl':
         specifier: workspace:*
         version: link:../hitl
-      '@slad/memory':
-        specifier: workspace:*
-        version: link:../memory
       '@slad/model-providers':
         specifier: workspace:*
         version: link:../model-providers
       '@slad/shared':
         specifier: workspace:*
         version: link:../shared
-      '@slad/telemetry':
-        specifier: workspace:*
-        version: link:../telemetry
       '@slad/tools':
         specifier: workspace:*
         version: link:../tools
@@ -349,18 +238,6 @@ importers:
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
-
-  packages/telemetry:
-    devDependencies:
-      '@types/node':
-        specifier: ^22.7.0
-        version: 22.19.19
-      tsx:
-        specifier: ^4.19.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.6.0
-        version: 5.6.3
 
   packages/tools:
     dependencies:

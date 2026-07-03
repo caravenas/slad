@@ -2,9 +2,9 @@ import type { z } from "zod";
 import type { CacheStore } from "@slad/cache";
 import type { ExecutionHarness } from "@slad/harness";
 import type { HITLTransport } from "@slad/hitl";
-import type { MemoryProvider } from "@slad/memory";
+import type { MemoryProvider } from "./memory/index.js";
 import type { ModelAdapter, ModelProvider } from "@slad/model-providers";
-import type { TelemetryProvider } from "@slad/telemetry";
+import type { TelemetryProvider } from "./telemetry/index.js";
 import type { ToolRegistry } from "@slad/tools";
 
 export type StageId = string;
