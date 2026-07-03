@@ -488,7 +488,7 @@ async function executeAction(
 
       // Smart routing: classify longer messages to detect pipeline intents.
       if (action.message.length > 20) {
-        const routing = await classifyIntent(action.message, provider as any, providerName).catch(() => null);
+        const routing = await classifyIntent(action.message, provider as any).catch(() => null);
         if (routing?.mode === "work" && routing.confidence >= 0.75) {
           const pct = Math.round(routing.confidence * 100);
           console.log(kleur.dim(`\n  → ${routing.rationale} (${pct}%)`));

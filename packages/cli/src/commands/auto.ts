@@ -367,7 +367,7 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
 
   const runClassifier = opts.classify !== false && !opts.debate && !opts.fresh;
   if (runClassifier) {
-    const decision = await classifyIntent(intent, provider as any, providerName);
+    const decision = await classifyIntent(intent, provider as any);
     if (decision && decision.confidence >= 0.8 && decision.mode !== "work") {
       const pct = Math.round(decision.confidence * 100);
       console.log(kleur.dim(`  ⚡ Clasificador → "${decision.mode}" (${pct}%): ${decision.rationale}`));
