@@ -4,7 +4,7 @@
  */
 export default {
   id: "{{id}}",
-  provider: "anthropic",
+  provider: "cli",
   paths: {
     agents: "./agents",
     tools: "./tools",

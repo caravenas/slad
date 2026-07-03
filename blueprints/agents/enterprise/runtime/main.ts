@@ -25,7 +25,7 @@ const stage = defineStage<{ intent: string }, { result: string }>({
 const pipeline = definePipeline({ id: "{{id}}", version: "0.1.0", stages: [stage] });
 
 const provider: ModelProvider = {
-  name: "anthropic",
+  name: "cli",
   async complete() {
     return "Replace this mock provider with getProvider(...).";
   },

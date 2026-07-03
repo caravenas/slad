@@ -19,5 +19,5 @@ pnpm start
 ```
 
 The generated agent ships with a mock model provider so it runs offline. Replace it
-with `getProvider("anthropic", process.env.ANTHROPIC_API_KEY)` for a real model, and
+with `getProvider("cli")` for a real model, and
 grow the project with `slad create tool|stage|pipeline <name>`.

@@ -5,7 +5,7 @@
 export default {
   id: "{{id}}",
   /** Default model provider. Set the matching API key in your environment. */
-  provider: "anthropic",
+  provider: "cli",
   /** Where this project keeps its agents, tools, and (optionally) pipelines. */
   paths: {
     agents: "./agents",
