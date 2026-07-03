@@ -11,7 +11,7 @@ import {
 } from "./chat-prompt.js";
 
 const items: PromptSlashItem[] = [
-  { insertion: "/create ", signature: "/create <kind> <name>", description: "Genera…", hasArgs: true },
+  { insertion: "/explore ", signature: "/explore <intent>", description: "Explora…", hasArgs: true },
   { insertion: "/help", signature: "/help", description: "Show help", hasArgs: false },
 ];
 
@@ -48,7 +48,7 @@ test("buildPromptFrame: dropdown lines + hint when suggestions present", () => {
   // 3 frame lines + 2 items + 1 hint
   assert.equal(frame.lines.length, 6);
   const rendered = frame.lines.map(stripAnsi);
-  assert.ok(rendered.some((l) => l.includes("/create <kind> <name>")));
+  assert.ok(rendered.some((l) => l.includes("/explore <intent>")));
   assert.ok(rendered.some((l) => l.includes("/help")));
   // selected (index 1 = /help) carries the ❯ marker
   const helpLine = rendered.find((l) => l.includes("/help"))!;

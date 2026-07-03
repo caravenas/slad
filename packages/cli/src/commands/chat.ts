@@ -20,7 +20,6 @@ import { learnCommand } from "./learn.js";
 import { evolveCommand } from "./evolve.js";
 import { renderSlashCommandSignature } from "@slad/shared";
 import { autoCommand } from "./auto.js";
-import { createCommand, listBlueprints } from "./create.js";
 import { modelCommand } from "./model.js";
 import { statsCommand } from "./stats.js";
 import { selectAgentInteractive } from "./agents.js";
@@ -99,17 +98,6 @@ export function parseAction(raw: string, _session: SessionState | null): ChatAct
     if (command) {
       if (command.id === "run" && /^T\d+$/i.test(tail)) return { type: "run-task", taskId: tail.toUpperCase() };
       if (command.id === "run" && /^(--auto|auto|todo)$/i.test(tail)) return { type: "run-auto" };
-      if (command.id === "create") {
-        if (!tail || /^(--list|-l|list)$/i.test(tail)) return { type: "create-list" };
-        const parts = tail.split(/\s+/);
-        const kind = parts[0];
-        const name = parts[1];
-        let template: string | undefined;
-        const tIdx = parts.findIndex((p) => p === "--template" || p === "-t");
-        if (tIdx !== -1) template = parts[tIdx + 1];
-        if (kind && name) return { type: "create", kind, name, template };
-        return { type: "unknown", input: trimmed };
-      }
       if (command.id === "auto" && tail) return { type: "auto", intent: tail };
       if (command.id === "work-debate" && tail) return { type: "auto-debate", intent: tail };
       if (command.id === "explore" && tail) return { type: "explore", intent: tail };
@@ -608,21 +596,6 @@ async function executeAction(
       );
       break;
 
-    case "create":
-      try {
-        await createCommand(action.kind, action.name, { template: action.template });
-      } catch (err) {
-        log.error((err as Error).message);
-      }
-      break;
-
-    case "create-list":
-      try {
-        listBlueprints();
-      } catch (err) {
-        log.error((err as Error).message);
-      }
-      break;
 
     case "status":
       await sessionShowCommand();

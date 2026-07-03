@@ -22,9 +22,9 @@ export function visibleWidth(value: string): number {
 
 /** A single entry in the inline slash-command dropdown. */
 export interface PromptSlashItem {
-  /** Text inserted when the item is completed, e.g. "/create " or "/help". */
+  /** Text inserted when the item is completed, e.g. "/explore " or "/help". */
   insertion: string;
-  /** Display signature, e.g. "/create <kind> <name>". */
+  /** Display signature, e.g. "/explore <intent>". */
   signature: string;
   description: string;
   /** Whether the command takes arguments (→ complete, don't submit, on Enter). */
@@ -69,7 +69,7 @@ function clampWidth(width: number): number {
  *   ─────────────────────────────   (top rule)
  *    ❯ <value>                       (input line)
  *   ─────────────────────────────   (bottom rule)
- *    ❯ /create  Genera un agente…    (dropdown, when slash active)
+ *    ❯ /explore  Explora una intención…  (dropdown, when slash active)
  *      /help    Show help…
  *      ↑↓ navegar · Tab completar · Enter ejecutar · Esc cerrar
  */

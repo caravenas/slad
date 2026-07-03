@@ -67,28 +67,17 @@ describe("SlashCommand", () => {
     assert.ok(ids.has("new"));
     assert.ok(ids.has("help"));
     assert.ok(ids.has("exit"));
-    assert.ok(ids.has("create"));
 
-    // The legacy command family shares a uniform shape: dual intent and no args
-    // (always available on the CLI surface). The kit `create` command is the
-    // deliberate exception. Surfaces may be cli-only (e.g. `model`, `create`).
+    // The command family shares a uniform shape: dual intent and no args
+    // (always available on the CLI surface). Surfaces may be cli-only (e.g. `model`).
     for (const command of parsed) {
       assert.ok(command.surfaces.includes("cli"));
       assert.ok(command.surfaces.every((surface) => surface === "cli" || surface === "ui"));
-      if (command.id === "create") continue;
       assert.deepEqual(command.args, []);
       assert.equal(command.executionIntent.kind, "dual");
       assert.equal(command.executionIntent.emitsSessionMessage, true);
       assert.equal(command.executionIntent.invokesLocalAction, true);
     }
-
-    // `create` is cli-only, carries arguments, and runs a pure local action.
-    const create = parsed.find((command) => command.id === "create");
-    if (!create) throw new Error("El comando 'create' falta en el catálogo.");
-    assert.equal(create.category, "kit");
-    assert.deepEqual(create.surfaces, ["cli"]);
-    assert.equal(create.args.length, 2);
-    assert.equal(create.executionIntent.kind, "local-action");
   });
 
   it("accepts valid slash command definitions", () => {

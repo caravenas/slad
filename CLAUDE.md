@@ -13,7 +13,7 @@ SLAD is a pnpm workspace with Turborepo orchestration.
 - `packages/pipeline` (`@slad/pipeline`): `defineStage`, `runPipeline`, `buildSladPipeline`, the SLAD stages, `createAgent()`, memory/telemetry providers, budget tracking.
 - `packages/cli` (`@slad/cli`): CLI orchestrator for `explore -> snapshot -> plan -> run -> learn -> evolve`.
 
-`examples/research-agent` shows SDK usage; `blueprints/` backs `slad create`.
+`examples/research-agent` shows SDK usage.
 
 ## Commands
 

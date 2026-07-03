@@ -14,8 +14,6 @@ import {
 
 export type CliSlashLocalAction =
   | { type: "chat"; message: string }
-  | { type: "create"; kind: string; name: string; template?: string }
-  | { type: "create-list" }
   | { type: "explore"; intent: string }
   | { type: "snapshot" }
   | { type: "plan" }
@@ -56,10 +54,6 @@ const noSessionMessage = "Este comando necesita una sesión activa. Crea una ses
 const cliSlashCommandHandlers = {
   ask: () => ({ sessionMessage: "Escribe tu pregunta como mensaje directo en el chat." }),
   chat: () => ({ sessionMessage: "Ya estás en el modo conversacional. Escribe tu mensaje y presiona Enter." }),
-  create: () => ({
-    sessionMessage:
-      "Usá /create <agent|tool|stage|pipeline|app> <nombre>. Ej: /create agent miagente · /create --list para ver blueprints.",
-  }),
   auto: (_payload, context) =>
     context.session
       ? { localAction: { type: "auto", intent: context.session.intent } }
