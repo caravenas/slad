@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { getParallelRunnableTasks, autoSkipDependents, type TaskStatus } from "./dag.js";
+import { getParallelRunnableTasks, getNextWave, autoSkipDependents, type TaskStatus } from "./dag.js";
 import type { PlanTask } from "../core/types.js";
 
 function task(id: string, opts: { dependsOn?: string[]; priority?: PlanTask["priority"] } = {}): PlanTask {
@@ -147,5 +147,67 @@ describe("autoSkipDependents", () => {
     const state = stateOf({ t1: "failed", t2: "pending" });
     const skipped = autoSkipDependents(tasks, state, "t1");
     assert.equal(skipped.length, 0);
+  });
+});
+
+describe("getNextWave", () => {
+  const owned = (id: string, files: string[], opts: { dependsOn?: string[]; priority?: PlanTask["priority"] } = {}): PlanTask => ({
+    ...task(id, opts),
+    files,
+  });
+
+  it("co-agenda solo tareas con archivos disjuntos", () => {
+    const tasks = [
+      owned("t1", ["a.ts"]),
+      owned("t2", ["a.ts", "b.ts"]),
+      owned("t3", ["c.ts"]),
+    ];
+    const state = stateOf({ t1: "pending", t2: "pending", t3: "pending" });
+    const wave = getNextWave(tasks, state);
+    assert.deepEqual(wave.map((t) => t.id), ["t1", "t3"]);
+  });
+
+  it("una tarea sin files declarados corre sola", () => {
+    const tasks = [owned("t1", []), owned("t2", ["a.ts"])];
+    const state = stateOf({ t1: "pending", t2: "pending" });
+    const wave = getNextWave(tasks, state);
+    assert.deepEqual(wave.map((t) => t.id), ["t1"]);
+  });
+
+  it("una tarea sin files no se une a una ola ya iniciada", () => {
+    const tasks = [owned("t1", ["a.ts"]), owned("t2", []), owned("t3", ["b.ts"])];
+    const state = stateOf({ t1: "pending", t2: "pending", t3: "pending" });
+    const wave = getNextWave(tasks, state);
+    assert.deepEqual(wave.map((t) => t.id), ["t1", "t3"]);
+  });
+
+  it("respeta maxParallel", () => {
+    const tasks = [owned("t1", ["a.ts"]), owned("t2", ["b.ts"]), owned("t3", ["c.ts"])];
+    const state = stateOf({ t1: "pending", t2: "pending", t3: "pending" });
+    const wave = getNextWave(tasks, state, 2);
+    assert.deepEqual(wave.map((t) => t.id), ["t1", "t2"]);
+  });
+
+  it("respeta dependencias: solo tareas con deps done entran", () => {
+    const tasks = [owned("t1", ["a.ts"]), owned("t2", ["b.ts"], { dependsOn: ["t1"] })];
+    const state = stateOf({ t1: "pending", t2: "pending" });
+    assert.deepEqual(getNextWave(tasks, state).map((t) => t.id), ["t1"]);
+    const after = stateOf({ t1: "done", t2: "pending" });
+    assert.deepEqual(getNextWave(tasks, after).map((t) => t.id), ["t2"]);
+  });
+
+  it("prioriza high sobre medium al reclamar archivos en conflicto", () => {
+    const tasks = [
+      owned("t1", ["a.ts"], { priority: "medium" }),
+      owned("t2", ["a.ts"], { priority: "high" }),
+    ];
+    const state = stateOf({ t1: "pending", t2: "pending" });
+    assert.deepEqual(getNextWave(tasks, state).map((t) => t.id), ["t2"]);
+  });
+
+  it("retorna vacío cuando no hay tareas ejecutables", () => {
+    const tasks = [owned("t1", ["a.ts"], { dependsOn: ["t0"] })];
+    const state = stateOf({ t0: "failed", t1: "pending" });
+    assert.deepEqual(getNextWave(tasks, state), []);
   });
 });

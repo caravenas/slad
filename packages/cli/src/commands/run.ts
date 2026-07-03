@@ -12,8 +12,9 @@ import { createHarness } from "@slad/harness";
 import { loadHarnessConfig } from "@slad/harness";
 import * as prompts from "../agents/prompts.js";
 import { getActiveSession, appendArtifact, saveSession } from "../core/session.js";
-import type { RunOutput } from "../core/types.js";
+import { PlanOutput, type RunOutput } from "../core/types.js";
 import { ProviderError } from "../core/errors.js";
+import { runParallel } from "./run-parallel.js";
 
 export interface RunOpts {
   input?: string;
@@ -32,6 +33,7 @@ export interface RunOpts {
   nonInteractive?: boolean;
   parallel?: boolean;
   maxParallel?: number;
+  strictOwnership?: boolean;
 }
 
 export async function runCommand(opts: RunOpts): Promise<void> {
@@ -59,6 +61,43 @@ export async function runCommand(opts: RunOpts): Promise<void> {
   const config = loadConfig();
   const providerName = resolveProvider(opts.provider, opts.agent, config.defaultProvider, config.defaultAgent);
 
+  if (opts.parallel) {
+    const parsed = PlanOutput.safeParse(planInput);
+    if (!parsed.success) {
+      log.error("El plan de la sesión no es un PlanOutput válido; no se puede ejecutar en paralelo.");
+      return;
+    }
+
+    // Workers read the model from env; an explicit -m must win over config.
+    if (opts.model) process.env.CLI_MODEL = opts.model;
+
+    log.title(`Run (parallel) · ${process.env.SLAD_CLI_BINARY ?? "cli"} · max ${opts.maxParallel ?? 3}`);
+    let currentSession = session;
+    const parallelResult = await runParallel({
+      plan: parsed.data,
+      sessionId: session.id,
+      cwd,
+      maxParallel: opts.maxParallel ?? 3,
+      strictOwnership: opts.strictOwnership ?? false,
+      onTaskOutput: async (output) => {
+        const ref = await writeArtifact("run", output, { sessionId: currentSession?.id ?? "adhoc" });
+        if (currentSession) {
+          currentSession = appendArtifact(currentSession, "run", ref.path);
+          saveSession(currentSession);
+        }
+      },
+    });
+
+    if (opts.json) {
+      console.log(JSON.stringify(parallelResult.outputs, null, 2));
+    } else {
+      const color =
+        parallelResult.status === "completed" ? kleur.green : parallelResult.status === "partial" ? kleur.yellow : kleur.red;
+      console.log("\n" + kleur.bold("Run ") + color(parallelResult.status));
+    }
+    if (parallelResult.status === "failed") process.exitCode = 1;
+    return;
+  }
 
   const model = opts.model ?? getModel(providerName);
   const provider = await getSladProvider(providerName);

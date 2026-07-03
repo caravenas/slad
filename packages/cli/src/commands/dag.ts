@@ -27,6 +27,35 @@ export function getParallelRunnableTasks(
 }
 
 /**
+ * Selects the next wave of tasks safe to run concurrently in a shared
+ * worktree: runnable tasks whose declared `files` are pairwise disjoint.
+ *
+ * A task with empty `files` conservatively owns everything: it only runs
+ * alone, and never joins a wave that already has members.
+ */
+export function getNextWave(
+  tasks: PlanTask[],
+  state: Map<string, TaskStatus>,
+  maxParallel = Number.POSITIVE_INFINITY,
+): PlanTask[] {
+  const wave: PlanTask[] = [];
+  const claimedFiles = new Set<string>();
+
+  for (const task of getParallelRunnableTasks(tasks, state)) {
+    if (wave.length >= maxParallel) break;
+    if (task.files.length === 0) {
+      if (wave.length === 0) return [task];
+      continue;
+    }
+    if (task.files.some((file) => claimedFiles.has(file))) continue;
+    wave.push(task);
+    for (const file of task.files) claimedFiles.add(file);
+  }
+
+  return wave;
+}
+
+/**
  * Marks all transitive dependents of a skipped/failed task as skipped.
  * Returns the list of newly skipped task IDs.
  */

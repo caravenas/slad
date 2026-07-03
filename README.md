@@ -81,6 +81,17 @@ slad auto "<intent>" \
   --json                      # machine-readable output
 ```
 
+### Parallel run
+
+```bash
+slad pipeline run --parallel --agent pi -m openai-codex/gpt-5.5
+```
+
+Executes the session's plan in waves: tasks whose declared `files` don't overlap run concurrently, one agent-CLI worker per task (each in its own tmux window when run inside tmux, plain child processes otherwise).
+Tasks that declare no `files` conservatively run alone.
+Worker prompts, transcripts, and exit codes land under `.slad-os/sessions/<id>/tasks/<taskId>/`.
+After each wave, `git status` is compared against the wave's declared files; violations are warned by default or fail the wave with `--strict-ownership`.
+
 Filter to one workspace package:
 
 ```bash
