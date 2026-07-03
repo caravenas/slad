@@ -4,7 +4,7 @@ import path from "node:path";
 import dotenv from "dotenv";
 import { AgentName, DevAgentConfig, ProviderName, type ProviderName as ProviderNameType } from "./types.js";
 import { DEFAULT_AGENT_ID } from "@slad/shared";
-import { backendEnvPatch, CliBackendId } from "./backend-registry.js";
+import { backendEnvPatch, CliBackendId, resolveBackendBinary } from "./backend-registry.js";
 
 const DEFAULT_MODELS: Record<ProviderNameType, string> = {
   cli: "",
@@ -124,6 +124,7 @@ export function resolveProvider(
   }
 
   if (!agent) {
+    autoDetectAgentEnv();
     return ProviderName.parse(provider ?? defaultProvider);
   }
 
@@ -133,12 +134,29 @@ export function resolveProvider(
   return "cli";
 }
 
-function applyAgentEnv(agent: import("@slad/shared").AgentName): void {
-  const configuredBinary = settingsValue<string>(["providers", "binaries", agent]);
+const BACKEND_AUTODETECT_ORDER: CliBackendId[] = ["claude", "pi", "codex"];
+
+/**
+ * Zero-config fallback: when no agent was chosen and no binary is configured,
+ * use the first supported backend found on PATH (or nvm fallbacks).
+ */
+function autoDetectAgentEnv(): void {
+  if (envValue("SLAD_CLI_BINARY")) return;
+  for (const id of BACKEND_AUTODETECT_ORDER) {
+    const resolution = resolveBackendBinary(id);
+    if (resolution.status === "resolved" && resolution.resolvedPath) {
+      applyAgentEnv(id, resolution.resolvedPath);
+      return;
+    }
+  }
+}
+
+function applyAgentEnv(agent: import("@slad/shared").AgentName, fallbackBinary?: string): void {
+  const configuredBinary = settingsValue<string>(["providers", "binaries", agent]) ?? fallbackBinary;
   const configuredAgentModel = settingsValue<string>(["providers", "agentModels", agent]);
   const configuredCliModel = settingsValue<string>(["providers", "models", "cli"]);
 
-  if (agent === "codex" || agent === "claude") {
+  if (agent === "codex" || agent === "claude" || agent === "pi") {
     const model = envValue("CLI_MODEL") ?? configuredAgentModel ?? configuredCliModel ?? (agent === "claude" ? "sonnet" : undefined);
     const envPatch = backendEnvPatch(CliBackendId.parse(agent), model, configuredBinary);
     if (process.env.SLAD_CLI_INHERIT_API_KEYS) delete envPatch.SLAD_CLI_INHERIT_API_KEYS;

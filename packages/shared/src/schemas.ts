@@ -48,7 +48,7 @@ export type ToolRisk = z.infer<typeof ToolRisk>;
 export const ProviderName = z.enum(["cli"]);
 export type ProviderName = z.infer<typeof ProviderName>;
 
-export const AgentName = z.enum(["codex", "claude", "gemini", "agent"]);
+export const AgentName = z.enum(["codex", "claude", "pi", "gemini", "agent"]);
 export type AgentName = z.infer<typeof AgentName>;
 
 export const MessageRole = z.enum(["system", "user", "assistant"]);

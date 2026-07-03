@@ -157,7 +157,7 @@ pipelineCmd
   .command("explore")
   .description("Explorer Agent: analiza una intención y devuelve enfoques, riesgos y next steps.")
   .argument("<intent...>", "La intención a explorar (entre comillas o libre)")
-  .option("-a, --agent <name>", "Agente local (codex | claude | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
   .option("-p, --provider <name>", "Provider LLM: anthropic | openai | gemini | cli  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. claude-sonnet-4-5, gpt-4o, gemini-2.0-flash)  [default: $SLAD_MODEL / $<PROVIDER>_MODEL]")
   .option("-o, --output <path>", "Guardar el resultado como JSON en esta ruta")
@@ -174,7 +174,7 @@ pipelineCmd
   .option("-i, --input <path>", "Ruta a un explore.json (output de `slad explore --output`)")
   .option("--intent <text>", "Intención directa si no hay input previo")
   .option("--approach <name>", "Nombre (o substring) del approach a elegir del explore.json")
-  .option("-a, --agent <name>", "Agente local (codex | claude | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
   .option("-p, --provider <name>", "Provider LLM: anthropic | openai | gemini | cli  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. claude-sonnet-4-5, gpt-4o, gemini-2.0-flash)  [default: $SLAD_MODEL / $<PROVIDER>_MODEL]")
   .option("-o, --output <path>", "Ruta de salida del .md (default: ./snapshots/<fecha>-<slug>.md)")
@@ -187,7 +187,7 @@ pipelineCmd
   .command("plan")
   .description("Planner Agent: convierte un Snapshot en tasks.json ejecutable.")
   .option("-i, --input <path>", "Ruta a un snapshot.md (default: último snapshot de la sesión activa)")
-  .option("-a, --agent <name>", "Agente local (codex | claude | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
   .option("-p, --provider <name>", "Provider LLM: anthropic | openai | gemini | cli  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. claude-sonnet-4-5, gpt-4o, gemini-2.0-flash)  [default: $SLAD_MODEL / $<PROVIDER>_MODEL]")
   .option("-o, --output <path>", "Ruta de salida del JSON (default: ./tasks/tasks.json)")
@@ -203,7 +203,7 @@ pipelineCmd
   .argument("[task]", "Task id a ejecutar (ej. T2). Alternativa a --task")
   .option("-i, --input <path>", "Ruta a tasks.json (default: ./tasks/tasks.json)")
   .option("-t, --task <id>", "Task id a ejecutar (default: recommendedFirstTask)")
-  .option("-a, --agent <name>", "Agente local (codex | claude | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
   .option("-p, --provider <name>", "Provider LLM: anthropic | openai | gemini | cli  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. claude-sonnet-4-5, gpt-4o, gemini-2.0-flash)  [default: $SLAD_MODEL / $<PROVIDER>_MODEL]")
   .option("-o, --output <path>", "[DEPRECATED] Ignorado; los runs se guardan en <docsRoot>/log/runs/")
@@ -226,7 +226,7 @@ pipelineCmd
   .command("learn")
   .description("Learn Agent: captura decisiones, errores y patrones desde un run report.")
   .option("-i, --input <path>", "Ruta a un run report .md o JSON legacy (default: último run persistido)")
-  .option("-a, --agent <name>", "Agente local (codex | claude | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
   .option("-p, --provider <name>", "Provider LLM: anthropic | openai | gemini | cli  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. claude-sonnet-4-5, gpt-4o, gemini-2.0-flash)  [default: $SLAD_MODEL / $<PROVIDER>_MODEL]")
   .option("-o, --output <path>", "Ruta de salida (default: ./learnings/<timestamp>-<task>.md)")
@@ -239,7 +239,7 @@ pipelineCmd
 pipelineCmd
   .command("evolve")
   .description("Evolve Agent: propone actualizaciones de wiki/patrones desde artefactos recientes.")
-  .option("-a, --agent <name>", "Agente local (codex | claude | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
   .option("-p, --provider <name>", "Provider LLM: anthropic | openai | gemini | cli  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. claude-sonnet-4-5, gpt-4o, gemini-2.0-flash)  [default: $SLAD_MODEL / $<PROVIDER>_MODEL]")
   .option("-o, --output <path>", "Ruta de salida (default: ./evolution/<timestamp>-evolve.md)")
@@ -288,7 +288,7 @@ function buildAutoOpts(opts: {
 
 const AUTO_OPTIONS = (cmd: import("commander").Command) =>
   cmd
-    .option("-a, --agent <name>", "Agente local (codex | claude | gemini)")
+    .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
     .option("-p, --provider <name>", "Provider LLM: anthropic | openai | gemini | cli  [default: $SLAD_DEFAULT_PROVIDER]")
     .option("-m, --model <name>", "Modelo a usar")
     .option("--max-cost <usd>", "Budget máximo en USD (default: 1.0)", parseFloat)
@@ -326,7 +326,7 @@ program
   .command("ask")
   .description("Respuesta directa del modelo, sin pipeline. Ideal para preguntas rápidas.")
   .argument("<question...>", "Pregunta o consulta (en lenguaje natural)")
-  .option("-a, --agent <name>", "Agente local (codex | claude | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
   .option("-p, --provider <name>", "Provider LLM: anthropic | openai | gemini | cli")
   .option("-m, --model <name>", "Modelo a usar")
   .option("--save", "Guardar la respuesta como nota en la sesión activa")
@@ -337,7 +337,7 @@ program
 program
   .command("chat")
   .description("REPL conversacional: explorá, planificá y ejecutá en formato chat.")
-  .option("-a, --agent <name>", "Agente local (codex | claude | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
   .option("-p, --provider <name>", "Provider LLM: anthropic | openai | gemini | cli  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. claude-sonnet-4-5, gpt-4o, gemini-2.0-flash)  [default: $SLAD_MODEL / $<PROVIDER>_MODEL]")
   .action(async (opts) => {
@@ -351,7 +351,7 @@ const sessionCmd = pipelineCmd
 sessionCmd
   .command("start <intent...>")
   .description("Crea una nueva sesión y la marca como activa.")
-  .option("-a, --agent <name>", "Agente local (codex | claude | gemini) — pre-selecciona sin pasar por discovery")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini) — pre-selecciona sin pasar por discovery")
   .action(async (intentParts: string[], opts) => {
     await sessionStartCommand(intentParts.join(" "), opts.agent);
   });
@@ -426,7 +426,7 @@ if (!hasSubcommand && !hasRootProgramFlag) {
   // Parse --agent / --provider / --model from argv manually so they work at the root level.
   const rootChat = new Command("slad")
     .allowUnknownOption(false)
-    .option("-a, --agent <name>", "Agente local (codex | claude | gemini)")
+    .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
     .option("-p, --provider <name>", "Provider LLM: anthropic | openai | gemini | cli")
     .option("-m, --model <name>", "Modelo a usar")
     .parse(process.argv);

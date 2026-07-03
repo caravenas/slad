@@ -33,8 +33,10 @@ function runCli(binary: string, args: string[], stdinData?: string): Promise<str
 
     if (stdinData !== undefined) {
       proc.stdin.write(stdinData);
-      proc.stdin.end();
     }
+    // Always close stdin: arg-mode backends (pi, claude) otherwise block
+    // waiting for EOF on the inherited pipe.
+    proc.stdin.end();
 
     proc.on("close", (code) => {
       if (code !== 0) {

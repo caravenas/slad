@@ -87,6 +87,10 @@ export async function runSetupIfNeeded(): Promise<void> {
     process.env.SLAD_CLI_ARGS = "--print";
     process.env.SLAD_CLI_PROMPT_MODE = "arg";
     writeConfig({ providers: { defaultProvider: "cli", defaultAgent: "claude" } });
+  } else if (basename === "pi") {
+    process.env.SLAD_CLI_ARGS = "--print --no-session";
+    process.env.SLAD_CLI_PROMPT_MODE = "arg";
+    writeConfig({ providers: { defaultProvider: "cli", defaultAgent: "pi" } });
   } else {
     process.env.SLAD_CLI_ARGS = "";
     process.env.SLAD_CLI_PROMPT_MODE = "arg";

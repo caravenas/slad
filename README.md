@@ -71,7 +71,7 @@ Common flags for `auto` / `work`:
 
 ```bash
 slad auto "<intent>" \
-  --agent claude              # CLI agent backend: claude | codex | gemini | agent
+  --agent claude              # CLI agent backend: claude | codex | pi | gemini | agent
   --model claude-opus-4-7     # provider-specific model id
   --harness on                # off | on | strict
   --max-cost 5                # USD budget

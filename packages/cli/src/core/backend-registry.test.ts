@@ -61,10 +61,10 @@ describe("backend-registry", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("modela Codex y Claude Code como backends CLI soportados", () => {
+  it("modela Codex, Claude Code y Pi como backends CLI soportados", () => {
     const backends = Object.fromEntries(listSupportedBackends().map((backend) => [backend.id, backend]));
 
-    assert.deepEqual(Object.keys(backends).sort(), ["claude", "codex"]);
+    assert.deepEqual(Object.keys(backends).sort(), ["claude", "codex", "pi"]);
     assert.deepEqual(backends.codex, {
       id: "codex",
       label: "Codex",
@@ -93,8 +93,18 @@ describe("backend-registry", () => {
         ["model", "list"],
       ],
     });
+    assert.deepEqual(backends.pi, {
+      id: "pi",
+      label: "Pi",
+      defaultBinary: "pi",
+      defaultArgs: ["--print", "--no-session"],
+      promptMode: "arg",
+      modelArg: "--model",
+      modelQueryCommands: [["--list-models"]],
+    });
     assert.equal(getCliBackend("codex").defaultBinary, "codex");
     assert.equal(getCliBackend("claude").defaultBinary, "claude");
+    assert.equal(getCliBackend("pi").defaultBinary, "pi");
   });
 
   it("parsea modelos desde respuestas JSON y texto plano", () => {
@@ -105,6 +115,18 @@ describe("backend-registry", () => {
     assert.deepEqual(
       parseModelList("Available models:\n- sonnet\n- opus  latest\n").map((m) => m.id),
       ["opus", "sonnet"],
+    );
+  });
+
+  it("parsea tablas provider/model como las de pi --list-models", () => {
+    const table = [
+      "provider      model                       context  max-out",
+      "anthropic     claude-fable-5              1M       128K",
+      "google        gemini-3-flash-preview      1M       64K",
+    ].join("\n");
+    assert.deepEqual(
+      parseModelList(table).map((m) => m.id),
+      ["anthropic/claude-fable-5", "google/gemini-3-flash-preview"],
     );
   });
 

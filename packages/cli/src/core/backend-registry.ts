@@ -9,7 +9,7 @@ import { DiscoveryResult, type DiscoveryResult as DiscoveryResultType } from "./
 
 const exec = promisify(execFile);
 
-export const CliBackendId = z.enum(["codex", "claude"]);
+export const CliBackendId = z.enum(["codex", "claude", "pi"]);
 export type CliBackendId = z.infer<typeof CliBackendId>;
 
 export const CliBackendSelection = z.object({
@@ -91,6 +91,15 @@ const BACKENDS: Record<CliBackendId, CliBackendDefinition> = {
       ["models"],
       ["model", "list"],
     ],
+  },
+  pi: {
+    id: "pi",
+    label: "Pi",
+    defaultBinary: "pi",
+    defaultArgs: ["--print", "--no-session"],
+    promptMode: "arg",
+    modelArg: "--model",
+    modelQueryCommands: [["--list-models"]],
   },
 };
 
@@ -231,14 +240,21 @@ export function parseModelList(stdout: string): BackendModel[] {
     try {
       collectModelIds(JSON.parse(text), ids);
     } catch {
+      // Tables headed "provider  model  \u2026" (pi --list-models) identify models
+      // as provider/model pairs; plain lists use the first column as the id.
+      const providerModelTable = /^provider\s{2,}model\b/i.test(text.split(/\r?\n/)[0] ?? "");
       for (const rawLine of text.split(/\r?\n/)) {
         const line = rawLine
           .trim()
           .replace(/^[*\-\u2022]\s*/, "")
           .replace(/^\d+[.)]\s*/, "");
-        if (!line || /^available models:?$/i.test(line) || /^id\s+/i.test(line)) continue;
-        const firstColumn = line.split(/\s{2,}|\t|\|/)[0]?.trim();
-        if (firstColumn) ids.add(firstColumn);
+        if (!line || /^available models:?$/i.test(line) || /^id\s+/i.test(line) || /^provider\s+/i.test(line)) continue;
+        const columns = line.split(/\s{2,}|\t|\|/).map((c) => c.trim());
+        if (providerModelTable && columns[0] && columns[1]) {
+          ids.add(`${columns[0]}/${columns[1]}`);
+        } else if (columns[0]) {
+          ids.add(columns[0]);
+        }
       }
     }
   }
@@ -291,7 +307,7 @@ export function resolveBackendBinary(provider: CliBackendId | string, binary?: s
 }
 
 export async function discoverBackendBinaries(
-  providers: CliBackendId[] = ["codex", "claude"],
+  providers: CliBackendId[] = ["codex", "claude", "pi"],
 ): Promise<DiscoveryResultType> {
   const candidates = [];
 
