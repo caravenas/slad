@@ -25,7 +25,6 @@ This is a pnpm + Turborepo monorepo.
 | `@slad/pipeline` | `defineStage`, `runPipeline`, `buildSladPipeline`, the 5 SLAD stages |
 | `@slad/agent` | `createAgent({ model, tools, memory, telemetry, pipeline })` |
 | `@slad/cli` | `slad` CLI orchestrator |
-| `@slad/ui` | Next.js dashboard |
 
 Turbo builds `@slad/shared` first, then dependents in topological order.
 
@@ -90,7 +89,7 @@ Filter to one workspace package:
 
 ```bash
 corepack pnpm --filter @slad/cli test
-corepack pnpm --filter @slad/ui dev
+corepack pnpm --filter @slad/pipeline test
 ```
 
 ---
