@@ -42,6 +42,8 @@ export interface SladPipelineResult {
   stagesCompleted: string[];
   outputs: Record<string, unknown>;
   artifacts: Record<string, string>;
+  /** "stageId: message" for each failed stage. */
+  errors: string[];
   durationMs: number;
 }
 
@@ -87,6 +89,7 @@ export async function runSladPipeline(options: SladPipelineOptions): Promise<Sla
   
   const services: SladServices = {
     provider: options.provider,
+    model: options.model,
     harness: options.harness,
     hitl: options.hitl,
     cache: options.cache,
@@ -113,6 +116,7 @@ export async function runSladPipeline(options: SladPipelineOptions): Promise<Sla
     stagesCompleted: result.stages.filter(s => s.status === "completed").map(s => s.stageId),
     outputs: Object.fromEntries(result.stages.map(s => [s.stageId, s.output])),
     artifacts: Object.fromEntries(result.artifacts.map(a => [a.stageId, a.name])),
+    errors: result.stages.filter(s => s.error).map(s => `${s.stageId}: ${s.error!.message}`),
     durationMs: result.durationMs,
   };
 }

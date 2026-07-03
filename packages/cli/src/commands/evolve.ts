@@ -17,6 +17,7 @@ import { projectContextBlock } from "../core/context.js";
 import { log } from "../core/logger.js";
 import { getSladProvider } from "../core/providers.js";
 import { getActiveSession, appendArtifact, saveSession, sessionContextBlock } from "../core/session.js";
+import { recordGlobalDecision } from "../persistence/global-memory.js";
 import { writeArtifact } from "../persistence/index.js";
 import { getDocsRoot } from "../persistence/layout.js";
 import { readSessionDecisions } from "../persistence/decisions.js";
@@ -282,6 +283,9 @@ export async function evolveCommand(opts: EvolveOpts): Promise<void> {
       log.dim(`  +${autoEntries.length} wiki entries auto-generados`);
     }
   }
+
+  const recorded = await recordGlobalDecision(output, { sessionId: session?.id ?? "adhoc" });
+  if (recorded) log.dim(`  memoria global: ${recorded}`);
 
   if (opts.json && !opts.output && !opts.applyWiki) {
     console.log(JSON.stringify(output, null, 2));

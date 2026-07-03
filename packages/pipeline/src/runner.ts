@@ -80,8 +80,9 @@ export async function runPipeline<Input = unknown, Output = unknown, Services ex
       }
     : rawProvider;
 
+  const defaultModelId = typeof services.model === "string" && services.model ? services.model : undefined;
   const model = wrappedProvider
-    ? createModelAdapter(wrappedProvider)
+    ? createModelAdapter(wrappedProvider, defaultModelId ? { model: defaultModelId } : undefined)
     : createNoopModelAdapter();
   const tools = services.tools instanceof ToolRegistry ? services.tools : new ToolRegistry();
   const telemetry = services.telemetry ?? NoopTelemetry;

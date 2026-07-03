@@ -191,9 +191,12 @@ export async function runCommand(opts: RunOpts): Promise<void> {
     },
   });
 
-  if (spinner.isSpinning) {
-     if (result.status === "failed") spinner.fail("Ejecución falló");
-     else spinner.succeed("Ejecución completada");
+  if (result.status === "failed") {
+    if (spinner.isSpinning) spinner.stop();
+    spinner.fail("Ejecución falló");
+    for (const error of result.errors) log.error(`  ${error}`);
+  } else if (spinner.isSpinning) {
+    spinner.succeed("Ejecución completada");
   }
 
   if (opts.json) {

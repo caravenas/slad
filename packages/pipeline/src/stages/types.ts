@@ -9,6 +9,8 @@ import type { DecisionRecord } from "@slad/shared";
 /** Services bag que los SLAD stages requieren */
 export interface SladServices extends PipelineServices {
   provider: ModelProvider;       // required
+  /** Default model id passed to every provider call (providers may override per call). */
+  model?: string;
   harness?: ExecutionHarness;
   hitl?: HITLTransport;
   tools?: ToolRegistry;

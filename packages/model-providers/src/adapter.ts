@@ -140,6 +140,7 @@ export function createModelAdapter(provider: ModelProvider, defaults?: Partial<C
         systemPrompt: opts.system,
         temperature: opts.temperature ?? defaults?.temperature ?? 0.3,
         maxTokens: opts.maxTokens ?? defaults?.maxTokens ?? 4096,
+        ...(defaults?.model ? { model: defaults.model } : {}),
       };
 
       const baseMessages = opts.messages ?? [{ role: "user" as const, content: formatInput(opts.input) }];
@@ -176,6 +177,7 @@ export function createModelAdapter(provider: ModelProvider, defaults?: Partial<C
         systemPrompt: opts.system,
         temperature: opts.temperature ?? defaults?.temperature ?? 0.5,
         maxTokens: opts.maxTokens ?? defaults?.maxTokens ?? 4096,
+        ...(defaults?.model ? { model: defaults.model } : {}),
       };
 
       return provider.complete(

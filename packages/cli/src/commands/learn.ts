@@ -9,7 +9,8 @@ import { readArtifact, writeArtifact, listArtifacts } from "../persistence/index
 import { createHitlTransport } from "@slad/hitl";
 import * as prompts from "../agents/prompts.js";
 import { getOrCreateSession, appendArtifact, saveSession } from "../core/session.js";
-import type { SessionState, RunOutput } from "../core/types.js";
+import { LearnOutput, type SessionState, type RunOutput } from "../core/types.js";
+import { recordGlobalLearning } from "../persistence/global-memory.js";
 
 export interface LearnOpts {
   input?: string;
@@ -108,9 +109,20 @@ export async function learnCommand(opts: LearnOpts): Promise<void> {
     }
   });
 
-  if (spinner.isSpinning) {
-     if (result.status === "failed") spinner.fail("Learn falló");
-     else spinner.succeed("Learn completado");
+  if (result.status === "failed") {
+    if (spinner.isSpinning) spinner.stop();
+    spinner.fail("Learn falló");
+    for (const error of result.errors) log.error(`  ${error}`);
+  } else if (spinner.isSpinning) {
+    spinner.succeed("Learn completado");
+  }
+
+  if (result.status !== "failed" && session) {
+    const learnOutput = LearnOutput.safeParse(result.outputs["learn"]);
+    if (learnOutput.success) {
+      const recorded = await recordGlobalLearning(learnOutput.data, { sessionId: session.id });
+      if (recorded) log.dim(`  memoria global: ${recorded}`);
+    }
   }
 
   if (opts.json) {

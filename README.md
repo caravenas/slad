@@ -212,6 +212,12 @@ const agent = createAgent({
 
 Inside a stage they're available as `ctx.memory` and `ctx.telemetry`. Each stage run is automatically wrapped in a telemetry span (`stage.<id>`) by the pipeline runner.
 
+### Global memory bridge
+
+Repo-local `docs/log/` is the canonical per-project record.
+Additionally, after `slad learn` / `slad evolve`, if the global workflow scripts exist (`~/.agents/workflows/scripts/record-{learning,decision}.mjs`), the results are exported to `~/.agents/learnings/` and `~/.agents/decisions/` so cross-project memory aggregates in one place.
+Best-effort: missing scripts or failures never break the command. Disable with `SLAD_GLOBAL_MEMORY=off`.
+
 ---
 
 ## Concepts cheat sheet
