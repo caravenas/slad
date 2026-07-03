@@ -1,10 +1,175 @@
 # SLAD
 
-**S**elf-**L**earning **A**utonomous **D**eveloper — a TypeScript framework and CLI for building agentic software-engineering pipelines on top of LLMs.
+**S**elf-**L**earning **A**utonomous **D**eveloper — an orchestrator for local coding-agent CLIs.
 
-SLAD orchestrates the loop `explore → snapshot → plan → run → learn → evolve` and exposes a composable Agent SDK (`defineTool → defineStage → buildPipeline → createAgent`) you can use to build your own agents.
+SLAD does not call model APIs and needs no API keys.
+It drives the agent CLIs you already have installed — `claude`, `codex`, `pi` — through a structured engineering loop:
 
----
+```
+explore → snapshot → plan → run → learn → evolve
+```
+
+Its flagship feature is parallel plan execution: one agent worker per task, each in its own tmux window, optionally isolated in per-task git worktrees whose results merge back into your working tree as staged, uncommitted changes.
+
+## Why SLAD
+
+Agent CLIs are excellent at single tasks but unstructured for larger work.
+SLAD adds what a solo agent session lacks:
+
+- **Explicit stages with reviewable artifacts.** Every stage writes JSON to `docs/log/` (explore analysis, snapshot spec, task plan, per-task run reports), tied together by a session.
+- **Safe parallelism.** The plan is a task DAG with per-task file ownership; SLAD schedules waves of tasks whose files don't overlap and runs one worker per task.
+- **Real isolation when you want it.** With `--worktrees`, workers physically cannot touch each other's files, and you get per-task change attribution.
+- **A memory loop.** `learn` extracts decisions/errors/patterns from run reports; `evolve` proposes prompt/wiki updates; both can feed a global cross-project memory.
+
+## Requirements
+
+- Node 22+ and Corepack-enabled pnpm.
+- git (required for ownership checks and `--worktrees`).
+- At least one agent CLI on your PATH: `claude`, `codex`, or `pi`.
+- tmux (optional — workers get their own windows when you run inside tmux; plain child processes otherwise).
+
+## Install
+
+```bash
+corepack pnpm install
+corepack pnpm build
+cd packages/cli && npm link   # exposes the `slad` binary globally
+```
+
+Zero configuration is needed to start: SLAD auto-detects the first available backend (`claude` → `pi` → `codex`).
+To pick defaults explicitly, run `slad model`, or pass `--agent` / `-m` per run.
+
+## Quick start
+
+```bash
+cd your-project
+
+# Sanity check: one round-trip through the auto-detected backend
+slad ask "what does this repo do?"
+
+# Analyze an intent and produce a plan (no code changes yet)
+slad pipeline auto "add input validation to the signup form" --dry-run
+
+# Execute the plan: independent tasks run in parallel workers
+slad pipeline run --parallel
+```
+
+## Use cases
+
+### 1. Plan first, review, then execute in parallel
+
+```bash
+slad pipeline auto "migrate the config module from JSON to TOML" --dry-run
+# → writes explore/snapshot/plan artifacts under docs/log/, creates a session
+
+cat docs/log/plans/<session>.json   # review tasks, dependencies, per-task files
+
+slad pipeline run --parallel --max-parallel 3
+```
+
+`run --parallel` schedules waves from the task DAG: tasks whose declared `files` don't overlap run concurrently; a task that declares no files runs alone.
+Inside tmux, each worker opens in its own window (`slad-T1`, `slad-T2`, …) so you can watch them work; the launching pane shows a live status table.
+Worker prompts, transcripts, and exit codes land under `.slad-os/sessions/<id>/tasks/<taskId>/`.
+
+### 2. Isolated execution with git worktrees
+
+```bash
+slad pipeline run --parallel --worktrees
+git diff --cached   # review the combined result, then commit yourself
+```
+
+Each task runs in its own git worktree branched from a session integration branch (`slad/<sessionId>/…`).
+Successful tasks are committed in their worktree and merged sequentially — dependent tasks branch from the updated tip, so they see earlier waves' work.
+At the end the result is squashed into your main worktree as staged, uncommitted changes; your branch gets no commits.
+Requires a committed HEAD; add `--keep-worktrees` to inspect the session worktrees afterwards.
+
+### 3. Enforce the plan's file ownership
+
+```bash
+slad pipeline run --parallel --strict-ownership
+```
+
+After each wave (or per task with `--worktrees`), changed files are compared against the plan's declared `files`.
+By default violations are warnings recorded in the run report; with `--strict-ownership` the offending task fails and its dependents are skipped — and in worktree mode its changes are not merged at all.
+
+### 4. Choose backend and model per run
+
+```bash
+slad pipeline run --parallel --agent claude -m sonnet
+slad pipeline run --parallel --agent pi -m openai-codex/gpt-5.5
+slad pipeline auto "..." --agent codex
+```
+
+With pi, prefer provider-qualified model ids (`openai-codex/gpt-5.5`, `google/gemini-3-flash-preview`) — bare names fuzzy-match across pi's providers.
+Persistent defaults live in `~/.slad/config.json` (managed by `slad model`) or per-project in `.slad-os/config.json`.
+
+### 5. Quick answers and conversational mode
+
+```bash
+slad ask "why would pnpm hoist this dependency?"
+slad chat        # REPL: /explore, /plan, /run T2, /auto ... as slash commands
+```
+
+Both spawn the configured backend directly — no pipeline, no session required for `ask`.
+
+### 6. Close the loop: learn and evolve
+
+```bash
+slad pipeline learn    # extract decisions, errors, and patterns from the session's run reports
+slad pipeline evolve   # propose wiki/prompt updates from recent artifacts
+```
+
+Learnings and decisions are written to `docs/log/` (the canonical per-project record).
+If the global workflow scripts exist (`~/.agents/workflows/scripts/record-{learning,decision}.mjs`), results are also exported to `~/.agents/learnings/` and `~/.agents/decisions/`, so cross-project memory aggregates in one place.
+This bridge is best-effort and can be disabled with `SLAD_GLOBAL_MEMORY=off`.
+
+## CLI reference
+
+Top level:
+
+| Command | Description |
+|---|---|
+| `slad ask <question>` | Direct answer from the backend, no pipeline |
+| `slad chat` | Conversational REPL with slash commands |
+| `slad model` | Configure default backend, binary, and model |
+| `slad stats` | Session/run/learning totals for the project |
+| `slad version` | Print version |
+
+Pipeline runtime (`slad pipeline …`):
+
+| Command | Description |
+|---|---|
+| `auto <intent>` (alias `work`) | Full loop: explore → snapshot → plan → run → learn |
+| `explore <intent>` | Approaches, risks, and next steps for an intent |
+| `snapshot` | Mini-spec from the explore output |
+| `plan` | Executable task DAG from the snapshot |
+| `run [task]` | Execute one task, `--auto` for the whole DAG, `--parallel` for waves |
+| `learn` | Capture decisions/errors/patterns from run reports |
+| `evolve` | Propose wiki/prompt updates from recent artifacts |
+| `session` | Manage work sessions (start, list, use, show) |
+| `agents` | List pipeline personas (prompt sets) |
+
+Key flags for `run --parallel`:
+
+```
+--max-parallel <n>    max concurrent workers (default: 3)
+--worktrees           per-task git worktrees + sequential merge + final squash
+--keep-worktrees      keep session worktrees/branches for debugging
+--strict-ownership    fail tasks that touch undeclared files
+--agent <name>        backend: claude | codex | pi
+-m, --model <id>      model passed to the backend
+```
+
+Useful environment variables:
+
+```bash
+SLAD_CLI_BINARY=claude        # backend binary (auto-detected when unset)
+SLAD_CLI_ARGS=--print         # non-interactive flags for the binary
+SLAD_CLI_PROMPT_MODE=arg      # arg | stdin
+CLI_MODEL=sonnet              # model forwarded to the backend
+SLAD_GLOBAL_MEMORY=off        # disable the ~/.agents memory bridge
+SLAD_LOG_LEVEL=info
+```
 
 ## Repository structure
 
@@ -19,229 +184,47 @@ This is a pnpm + Turborepo monorepo.
 | `@slad/hitl` | Human-in-the-loop transports (TTY, none) |
 | `@slad/cache` | Stage output cache (`CacheStore`) |
 | `@slad/pipeline` | `defineStage`, `runPipeline`, `buildSladPipeline`, the 5 SLAD stages, `createAgent()`, memory/telemetry providers, budget tracking |
-| `@slad/cli` | `slad` CLI orchestrator |
+| `@slad/cli` | The `slad` orchestrator CLI |
 
-Turbo builds `@slad/shared` first, then dependents in topological order.
+## Embedding SLAD (SDK)
 
----
-
-## Setup
-
-Requires Node 22+ and Corepack-enabled pnpm.
-
-```bash
-corepack pnpm install
-corepack pnpm build
-corepack pnpm typecheck
-corepack pnpm test
-```
-
-SLAD delegates model calls to a local agent CLI (`claude`, `codex`, …).
-Run `slad setup` (or any command — setup runs automatically) to pick the binary, or configure it via `.env`:
-
-```bash
-SLAD_CLI_BINARY=claude
-SLAD_CLI_ARGS=--print
-SLAD_CLI_PROMPT_MODE=arg
-SLAD_LOG_LEVEL=info
-```
-
----
-
-## Using the CLI
-
-```bash
-corepack pnpm dev:cli -- auto "agregá una función sum al módulo math"
-```
-
-Available commands:
-
-| Command | Description |
-|---|---|
-| `slad auto <intent>` | Full pipeline: classify → explore → snapshot → plan → run → learn |
-| `slad work <intent>` | Same as `auto` but skips the intent classifier |
-| `slad ask <intent>` | Direct Q&A without running the pipeline |
-| `slad explore <intent>` | Run only the explore stage |
-| `slad snapshot` / `plan` / `run` / `learn` / `evolve` | Run individual stages |
-| `slad chat` | Interactive REPL |
-| `slad session start \| list \| use \| show` | Session state |
-| `slad stats` / `version` | Diagnostics |
-
-Common flags for `auto` / `work`:
-
-```bash
-slad auto "<intent>" \
-  --agent claude              # CLI agent backend: claude | codex | pi | gemini | agent
-  --model claude-opus-4-7     # provider-specific model id
-  --harness on                # off | on | strict
-  --max-cost 5                # USD budget
-  --dry-run                   # stop after plan (no run/learn)
-  --resume                    # resume previous session
-  --debate                    # multi-model debate variant
-  --json                      # machine-readable output
-```
-
-### Parallel run
-
-```bash
-slad pipeline run --parallel --agent pi -m openai-codex/gpt-5.5
-```
-
-Executes the session's plan in waves: tasks whose declared `files` don't overlap run concurrently, one agent-CLI worker per task (each in its own tmux window when run inside tmux, plain child processes otherwise).
-Tasks that declare no `files` conservatively run alone.
-Worker prompts, transcripts, and exit codes land under `.slad-os/sessions/<id>/tasks/<taskId>/`.
-After each wave, `git status` is compared against the wave's declared files; violations are warned by default or fail the wave with `--strict-ownership`.
-
-Add `--worktrees` for real isolation: each task runs in its own git worktree branched from a session integration branch (`slad/<sessionId>/…`), so workers physically can't touch each other's files and ownership is attributed per task.
-Successful tasks are committed in their worktree and merged sequentially into the integration branch (dependents branch from the updated tip, so they see prior waves' work); at the end the result is squashed into the main worktree as staged, uncommitted changes — you review and commit.
-Requires a committed HEAD; uncommitted changes in the main worktree are not visible to workers.
-`--keep-worktrees` preserves the session worktrees and branches for debugging.
-
-Filter to one workspace package:
-
-```bash
-corepack pnpm --filter @slad/cli test
-corepack pnpm --filter @slad/pipeline test
-```
-
----
-
-## Using the Agent SDK
-
-The CLI is just one consumer. You can embed SLAD in your own code via `createAgent()` from `@slad/pipeline`.
-
-### Run the built-in SLAD pipeline
+The CLI is one consumer; the pipeline runtime is a library.
 
 ```ts
-import { buildSladPipeline } from "@slad/pipeline";
-import { createAgent } from "@slad/pipeline";
+import { buildSladPipeline, createAgent } from "@slad/pipeline";
 import { getProvider } from "@slad/model-providers";
 import { createHarness } from "@slad/harness";
-import { createHitlTransport } from "@slad/hitl";
 
 const provider = await getProvider("cli"); // spawns the agent binary from SLAD_CLI_* env
 const harness  = await createHarness({ mode: "on", maxPermission: "workspace" });
-const hitl     = createHitlTransport("tty");
-
-const pipeline = buildSladPipeline({
-  stages: ["explore", "snapshot", "plan", "run", "learn"],
-  prompts: { /* optional system prompt overrides */ },
-  policies: { budget: { maxModelCalls: 50 } },
-});
 
 const agent = createAgent({
   model: provider,
   safety: harness,
-  hitl,
-  pipeline,
+  pipeline: buildSladPipeline({ stages: ["explore", "snapshot", "plan", "run", "learn"] }),
 });
 
-const result = await agent.run(
-  { intent: "add a sum() to packages/math" },
-  {
-    onStageStart:    (stage) => console.log(`→ ${stage}`),
-    onStageComplete: (stage) => console.log(`✓ ${stage}`),
-    onArtifact:      (stage, value) => { /* persist artifacts */ },
-  },
-);
-
-console.log(result.status, result.stages.map((s) => s.stageId));
+const result = await agent.run({ intent: "add a sum() to packages/math" });
 ```
 
-### Define a custom tool
+Custom stages (`defineStage`), tools (`defineTool` + `ToolRegistry`), memory (`WikiMemoryProvider`), and telemetry (`LDJSONTelemetry`) compose the same way — everything is exported from `@slad/pipeline` and `@slad/tools`.
+Inside a stage, `ctx.model.generateObject({ schema, system, input })` gives schema-validated JSON from the backend with auto-fix retries.
 
-```ts
-import { z } from "zod";
-import { defineTool } from "@slad/tools";
+## Development
 
-export const searchDocsTool = defineTool({
-  id: "docs.search",
-  description: "Search internal documentation by keyword",
-  permissions: ["network:read"],
-  input:  z.object({ query: z.string() }),
-  output: z.object({ hits: z.array(z.object({ url: z.string(), title: z.string() })) }),
-  async run({ query }, ctx) {
-    ctx.audit?.emit("docs.search.start", { query });
-    const hits = await fetchDocs(query);
-    return { hits };
-  },
-});
+```bash
+corepack pnpm install
+corepack pnpm typecheck   # no build needed: types resolve from source
+corepack pnpm build
+corepack pnpm test
+corepack pnpm --filter @slad/cli test
 ```
-
-Then register it on the agent:
-
-```ts
-const agent = createAgent({
-  model: provider,
-  tools: [searchDocsTool, ...otherTools],
-  pipeline,
-});
-```
-
-### Define a custom stage
-
-```ts
-import { z } from "zod";
-import { defineStage } from "@slad/pipeline";
-
-const summarizeStage = defineStage({
-  id: "summarize",
-  inputSchema:  z.object({ text: z.string() }),
-  outputSchema: z.object({ bullets: z.array(z.string()) }),
-  permissions: ["read"],
-  async run(input, ctx) {
-    return ctx.model.generateObject({
-      schema: z.object({ bullets: z.array(z.string()) }),
-      system: "Summarize the input as 3-5 bullets. Output JSON only.",
-      input: input.text,
-    });
-  },
-});
-```
-
-Compose stages into a pipeline yourself with `runPipeline()` if you don't want the SLAD-specific stages.
-
-### Inject memory and telemetry
-
-```ts
-import { WikiMemoryProvider } from "@slad/pipeline";
-import { LDJSONTelemetry } from "@slad/pipeline";
-
-const agent = createAgent({
-  model: provider,
-  memory: new WikiMemoryProvider("./.slad-os/memory"),
-  telemetry: new LDJSONTelemetry("./.slad-os/telemetry.ldjson"),
-  pipeline,
-});
-```
-
-Inside a stage they're available as `ctx.memory` and `ctx.telemetry`. Each stage run is automatically wrapped in a telemetry span (`stage.<id>`) by the pipeline runner.
-
-### Global memory bridge
-
-Repo-local `docs/log/` is the canonical per-project record.
-Additionally, after `slad learn` / `slad evolve`, if the global workflow scripts exist (`~/.agents/workflows/scripts/record-{learning,decision}.mjs`), the results are exported to `~/.agents/learnings/` and `~/.agents/decisions/` so cross-project memory aggregates in one place.
-Best-effort: missing scripts or failures never break the command. Disable with `SLAD_GLOBAL_MEMORY=off`.
-
----
-
-## Concepts cheat sheet
-
-- **`ModelAdapter`** — typed wrapper around a provider. `generateObject({ schema, system, input | messages })` retries with auto-fix JSON; `generateText()` returns raw text.
-- **`ToolDef<I,O>`** — Zod-validated tool with permissions. Registered in a `ToolRegistry` and reachable from stages via `ctx.tools.call("tool.id", input)`.
-- **`Stage<I,O,S>`** — typed unit of work. Receives `StageContext` with `model`, `tools`, `audit`, `memory?`, `telemetry?`, `services`, `state`, `signal`, `emitArtifact`.
-- **`PipelinePolicies`** — pipeline-level policies: `budget.maxModelCalls`, `humanApproval`, `checkpoint`, `audit`, `telemetry`.
-- **`ExecutionHarness`** — gates dangerous operations. Hooks `beforeTask` / `afterTask`, classifies command output, exposes `assertPermission(p)`.
-- **Granular permissions** — `workspace:read`, `workspace:write`, `process:exec`, `network:read`, `network:write`, …  See `@slad/shared`.
-
----
-
-## Development tips
 
 - Local ESM imports use `.js` extensions in source.
 - Shared serializable contracts live in `packages/shared/src` — don't duplicate them.
-- Typecheck resolves types from source (each package's `exports` maps `types` to `./src/index.ts`), so `pnpm typecheck` needs no prior build.
-- Tests use `node --test` with `tsx/esm` loader. Run a single file: `node --import tsx/esm --test packages/<pkg>/src/foo.test.ts`.
+- Every package's `exports` maps `types` to `./src/index.ts`; no TypeScript project references.
+- Tests use `node --test` with the `tsx/esm` loader. Run a single file from inside a package: `node --import tsx/esm --test src/foo.test.ts`.
+- CI (GitHub Actions) runs typecheck, build, and test on every push and PR to master.
 
 ## License
 

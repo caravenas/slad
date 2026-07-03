@@ -1,16 +1,52 @@
 # SLAD Agent Notes
 
+## Focus
+
+SLAD is an orchestrator of local coding-agent CLIs (`claude`, `codex`, `pi`) — not a general LLM framework.
+It drives the loop `explore → snapshot → plan → run → learn → evolve`, and its differentiating feature is parallel plan execution: one agent-CLI worker per task in tmux windows, optionally isolated in per-task git worktrees (`--worktrees`) whose results merge back as staged, uncommitted changes.
+There are no HTTP model adapters and no API-key handling: `CliProvider` (in `@slad/model-providers`) spawns the configured agent binary, and `ProviderName` is just `["cli"]`.
+Do not reintroduce API providers, key plumbing, or vendor SDKs.
+
 ## Architecture
 
-The monorepo has three active packages:
+The monorepo is a pnpm + Turborepo workspace with 8 packages:
+`shared`, `model-providers`, `tools`, `harness`, `hitl`, `cache`, `pipeline`, `cli`.
+Two define the core data contracts:
 
 - `@slad/shared`: canonical Zod schemas and inferred types for agent outputs, sessions, questions, plan tasks, run outputs, learn outputs, evolve outputs, and stage constants.
 - `@slad/cli`: Node ESM CLI. Local imports keep `.js` extensions. Internal files may still import from `./core/types.js`; that file bridges to `@slad/shared`.
-- `@slad/ui`: Next.js dashboard. It imports shared contracts and extends them with UI-only types.
+
+Removed — do not reference: the `@slad/ui` Next.js dashboard; the `@slad/agent`, `@slad/memory`, `@slad/telemetry`, `@slad/audit-log`, and `@slad/context-budget` micro-packages (folded into `@slad/pipeline` and `@slad/harness`, re-exported from there); the Anthropic/OpenAI/Gemini HTTP adapters; `apps/`; `blueprints/` and the `slad create` command.
+
+Key CLI internals:
+
+- `packages/cli/src/core/backend-registry.ts`: supported agent backends (codex, claude, pi) — binaries, args, prompt modes, model listing. New backends go here; verify a binary's non-interactive flags against the real binary before wiring them.
+- `packages/cli/src/commands/run-parallel.ts` + `dag.ts` + `worktrees.ts`: wave scheduler (pairwise-disjoint `PlanTask.files`), worker spawning (tmux window or child process, sentinel files), git worktree lifecycle.
+- `packages/cli/src/persistence/global-memory.ts`: best-effort export of learn/evolve results to `~/.agents/{learnings,decisions}` via the global scripts (disable with `SLAD_GLOBAL_MEMORY=off`).
 
 ## Rules
 
 - Add or change cross-package data contracts in `packages/shared/src/schemas.ts`.
 - Keep CLI-only runtime callbacks, local discovery, project inventory, and project config schemas in `packages/cli/src/core/types.ts`.
-- Keep dashboard metrics and mock-display fields in `packages/ui/src/lib/types.ts`.
-- Run verification from the root with `corepack pnpm build`, `corepack pnpm typecheck`, and `corepack pnpm test`.
+- Typecheck resolves dependency types from source: every package's `exports` maps `types` to `./src/index.ts`. Never reintroduce TypeScript project references or `composite`; `pnpm typecheck` must pass with zero `dist/` present.
+- Model ids for CLI backends are backend-specific; with pi, prefer provider-qualified ids (`openai-codex/gpt-5.5`) because bare names fuzzy-match across providers.
+- Run verification from the root with `corepack pnpm build`, `corepack pnpm typecheck`, and `corepack pnpm test`. CI runs the same three on every push/PR to master.
+
+## Workflow patterns
+
+Use the global Pi + cmux workflow assets for SLAD-inspired workflow patterns. SLAD ideas are useful here as patterns, but this repository should not own the global workflow runtime.
+
+For non-trivial or multi-agent work, prefer the global loop:
+
+`explore → snapshot → plan → run → learn → evolve`
+
+Global assets live outside this repo:
+
+- skill: `~/.agents/skills/slad-workflow/SKILL.md`
+- Pi prompt templates: `~/.pi/agent/prompts/{explore,snapshot,plan,handoff,draft-learn,draft-decision}.md`
+- memory plan: `~/.agents/memory/pi-cmux-agentic-workflow-plan.md`
+- portable scripts: `~/.agents/workflows/scripts/*.mjs`
+
+`slad learn` and `slad evolve` already bridge into that system: when the global scripts exist, their results are also recorded under `~/.agents/learnings/` and `~/.agents/decisions/`.
+
+Only add project-local workflow memory when a decision or learning is specific to SLAD itself.
