@@ -8,6 +8,7 @@ import {
   buildDecisionArgs,
   buildLearningArgs,
   globalMemoryScript,
+  readProjectMemory,
   recordGlobalLearning,
 } from "./global-memory.js";
 
@@ -55,6 +56,45 @@ describe("buildDecisionArgs", () => {
     assert.equal(args[args.indexOf("--title") + 1], "Ajustar prompt del planner");
     assert.equal(args[args.indexOf("--status") + 1], "proposed");
     assert.equal(args[args.indexOf("--follow-up") + 1], "update prompts/planner.md");
+  });
+});
+
+describe("readProjectMemory", () => {
+  function projectsDirWith(name: string, content: string): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "slad-pm-"));
+    fs.writeFileSync(path.join(dir, `${name}.md`), content);
+    return dir;
+  }
+
+  it("lee la entrada que coincide con el basename del workspace", () => {
+    const dir = projectsDirWith("slad", "# SLAD\n\nRuntime: .slad-os/.");
+    assert.equal(readProjectMemory("/Users/chris/Projects/slad", dir), "# SLAD\n\nRuntime: .slad-os/.");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("retorna null cuando no hay entrada para el proyecto", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "slad-pm-empty-"));
+    assert.equal(readProjectMemory("/Users/chris/Projects/slad", dir), null);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("trunca entradas más largas que el máximo", () => {
+    const dir = projectsDirWith("slad", "x".repeat(5_000));
+    const result = readProjectMemory("/tmp/slad", dir);
+    assert.ok(result!.length < 5_000);
+    assert.ok(result!.endsWith("[…truncated]"));
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("respeta SLAD_GLOBAL_MEMORY=off", () => {
+    const dir = projectsDirWith("slad", "contenido");
+    process.env.SLAD_GLOBAL_MEMORY = "off";
+    try {
+      assert.equal(readProjectMemory("/tmp/slad", dir), null);
+    } finally {
+      delete process.env.SLAD_GLOBAL_MEMORY;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

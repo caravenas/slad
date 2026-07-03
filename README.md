@@ -19,7 +19,7 @@ SLAD adds what a solo agent session lacks:
 - **Explicit stages with reviewable artifacts.** Every stage writes JSON to `docs/log/` (explore analysis, snapshot spec, task plan, per-task run reports), tied together by a session.
 - **Safe parallelism.** The plan is a task DAG with per-task file ownership; SLAD schedules waves of tasks whose files don't overlap and runs one worker per task.
 - **Real isolation when you want it.** With `--worktrees`, workers physically cannot touch each other's files, and you get per-task change attribution.
-- **A memory loop.** `learn` extracts decisions/errors/patterns from run reports; `evolve` proposes prompt/wiki updates; both can feed a global cross-project memory.
+- **A memory loop.** `learn` extracts decisions/errors/patterns from run reports; `evolve` proposes prompt/wiki updates; both can feed a global cross-project memory — and parallel workers read the project's global memory entry back in their handoff prompts.
 
 ## Requirements
 
@@ -69,6 +69,7 @@ slad pipeline run --parallel --max-parallel 3
 
 `run --parallel` schedules waves from the task DAG: tasks whose declared `files` don't overlap run concurrently; a task that declares no files runs alone.
 Inside tmux, each worker opens in its own window (`slad-T1`, `slad-T2`, …) so you can watch them work; the launching pane shows a live status table.
+If a cross-agent memory entry exists for the repo (`~/.agents/memory/projects/<repo>.md`), each worker's handoff prompt includes it — context the worker's own CLI would not load by itself.
 Worker prompts, transcripts, and exit codes land under `.slad-os/sessions/<id>/tasks/<taskId>/`.
 
 ### 2. Isolated execution with git worktrees

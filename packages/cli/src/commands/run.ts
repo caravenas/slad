@@ -7,6 +7,7 @@ import { getSladProvider } from "../core/providers.js";
 import { log } from "../core/logger.js";
 import { writeArtifact, readArtifact } from "../persistence/index.js";
 import { pathForArtifact } from "../persistence/layout.js";
+import { readProjectMemory } from "../persistence/global-memory.js";
 import { createHitlTransport } from "@slad/hitl";
 import { createHarness } from "@slad/harness";
 import { loadHarnessConfig } from "@slad/harness";
@@ -83,6 +84,7 @@ export async function runCommand(opts: RunOpts): Promise<void> {
       strictOwnership: opts.strictOwnership ?? false,
       useWorktrees: opts.worktrees ?? false,
       keepWorktrees: opts.keepWorktrees ?? false,
+      projectMemory: readProjectMemory(cwd),
       onTaskOutput: async (output) => {
         const ref = await writeArtifact("run", output, { sessionId: currentSession?.id ?? "adhoc" });
         if (currentSession) {

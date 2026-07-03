@@ -22,7 +22,7 @@ Key CLI internals:
 
 - `packages/cli/src/core/backend-registry.ts`: supported agent backends (codex, claude, pi) — binaries, args, prompt modes, model listing. New backends go here; verify a binary's non-interactive flags against the real binary before wiring them.
 - `packages/cli/src/commands/run-parallel.ts` + `dag.ts` + `worktrees.ts`: wave scheduler (pairwise-disjoint `PlanTask.files`), worker spawning (tmux window or child process, sentinel files), git worktree lifecycle.
-- `packages/cli/src/persistence/global-memory.ts`: best-effort export of learn/evolve results to `~/.agents/{learnings,decisions}` via the global scripts (disable with `SLAD_GLOBAL_MEMORY=off`).
+- `packages/cli/src/persistence/global-memory.ts`: best-effort bridge to `~/.agents` in both directions — exports learn/evolve results to `~/.agents/{learnings,decisions}` via the global scripts, and `readProjectMemory()` reads `~/.agents/memory/projects/<repo>.md` for injection into parallel handoff prompts (disable both with `SLAD_GLOBAL_MEMORY=off`).
 
 ## Rules
 
@@ -48,5 +48,6 @@ Global assets live outside this repo:
 - portable scripts: `~/.agents/workflows/scripts/*.mjs`
 
 `slad learn` and `slad evolve` already bridge into that system: when the global scripts exist, their results are also recorded under `~/.agents/learnings/` and `~/.agents/decisions/`.
+The bridge also reads back: `slad run --parallel` injects the repo's entry from `~/.agents/memory/projects/` into each worker's handoff prompt when one exists.
 
 Only add project-local workflow memory when a decision or learning is specific to SLAD itself.

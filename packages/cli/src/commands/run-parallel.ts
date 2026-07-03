@@ -41,6 +41,11 @@ export interface ParallelRunOptions {
   keepWorktrees?: boolean;
   /** Per-task timeout. Default: 15 minutes. */
   taskTimeoutMs?: number;
+  /**
+   * Cross-agent project memory (~/.agents/memory/projects/<repo>.md) injected
+   * into every handoff prompt. Callers resolve it via readProjectMemory().
+   */
+  projectMemory?: string | null;
   /** Called with each task's RunOutput as it completes (persistence hook). */
   onTaskOutput?: (output: RunOutput) => Promise<void>;
   /** Test seam: replaces real worker execution (tmux/child process). */
@@ -72,7 +77,11 @@ export interface ParallelRunResult {
 
 // ─── Handoff prompt ───────────────────────────────────────────────────────────
 
-export function buildHandoffPrompt(task: PlanTask, plan: PlanOutput): string {
+export function buildHandoffPrompt(
+  task: PlanTask,
+  plan: PlanOutput,
+  projectMemory?: string | null,
+): string {
   const ownership =
     task.files.length > 0
       ? `SOLO puedes crear o modificar estos archivos (otros workers editan otros archivos en paralelo — no toques nada fuera de tu lista):\n${task.files.map((f) => `- ${f}`).join("\n")}`
@@ -81,6 +90,9 @@ export function buildHandoffPrompt(task: PlanTask, plan: PlanOutput): string {
   return [
     `[System]\n${BUILDER_REVIEWER_SYSTEM}`,
     `Contexto adicional — ejecución paralela:\n${ownership}`,
+    ...(projectMemory
+      ? [`Memoria global del proyecto (~/.agents/memory/projects/):\n${projectMemory}`]
+      : []),
     `Plan summary:\n${plan.summary}`,
     `Selected task:\n${JSON.stringify(task, null, 2)}`,
     `Al terminar, imprime como ÚLTIMO bloque de tu salida un objeto JSON válido con esta forma exacta (schema RunOutput):\n` +
@@ -308,6 +320,7 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
     useWorktrees = false,
     keepWorktrees = false,
     taskTimeoutMs = 15 * 60_000,
+    projectMemory = null,
     onTaskOutput,
     print = console.log,
   } = options;
@@ -344,7 +357,7 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
     for (const task of wave) {
       const workerDir = path.join(tasksRoot, task.id);
       fs.mkdirSync(workerDir, { recursive: true });
-      fs.writeFileSync(path.join(workerDir, "prompt.txt"), buildHandoffPrompt(task, plan));
+      fs.writeFileSync(path.join(workerDir, "prompt.txt"), buildHandoffPrompt(task, plan, projectMemory));
       const workspace = integration
         ? await addTaskWorktree(cwd, sessionId, task.id, baseRef!)
         : cwd;

@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -84,6 +84,31 @@ async function record(
   const retryArgs = [...args];
   retryArgs[titleIndex] = `${args[titleIndex]} · ${ctx.sessionId.slice(0, 6)}`;
   return invoke(script, retryArgs);
+}
+
+/** Longest project memory injected into a handoff prompt, in characters. */
+const PROJECT_MEMORY_MAX_CHARS = 4_000;
+
+/**
+ * Reads the cross-agent project memory entry for a workspace, identified by
+ * the directory basename: ~/.agents/memory/projects/<basename>.md. Used to
+ * give parallel workers the global-side context their CLI does not auto-load
+ * (repo AGENTS.md/CLAUDE.md they already read from the workspace).
+ */
+export function readProjectMemory(
+  projectDir: string,
+  projectsDir = path.join(os.homedir(), ".agents", "memory", "projects"),
+): string | null {
+  if (process.env.SLAD_GLOBAL_MEMORY === "off") return null;
+  try {
+    const content = readFileSync(path.join(projectsDir, `${path.basename(projectDir)}.md`), "utf8").trim();
+    if (!content) return null;
+    return content.length > PROJECT_MEMORY_MAX_CHARS
+      ? `${content.slice(0, PROJECT_MEMORY_MAX_CHARS)}\n[…truncated]`
+      : content;
+  } catch {
+    return null;
+  }
 }
 
 /** Exports a LearnOutput to ~/.agents/learnings/. Returns the written path, or null. */

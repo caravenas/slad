@@ -56,6 +56,18 @@ describe("buildHandoffPrompt", () => {
     const prompt = buildHandoffPrompt(task("T1", []), plan([task("T1", [])]));
     assert.ok(prompt.includes("único worker"));
   });
+
+  it("incluye la memoria global del proyecto cuando se entrega", () => {
+    const memory = "# SLAD\n\nConvención de runtime: .slad-os/.";
+    const prompt = buildHandoffPrompt(task("T1", ["src/a.ts"]), plan([task("T1", ["src/a.ts"])]), memory);
+    assert.ok(prompt.includes("Memoria global del proyecto"));
+    assert.ok(prompt.includes("Convención de runtime: .slad-os/."));
+  });
+
+  it("omite la sección de memoria cuando no hay entrada", () => {
+    const prompt = buildHandoffPrompt(task("T1", ["src/a.ts"]), plan([task("T1", ["src/a.ts"])]), null);
+    assert.ok(!prompt.includes("Memoria global del proyecto"));
+  });
 });
 
 describe("parseWorkerOutput", () => {
