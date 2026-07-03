@@ -15,7 +15,7 @@ const PRICING: Record<string, { input: number; output: number }> = {
   // Gemini
   "gemini-2.0-flash": { input: 0.075, output: 0.3 },
   "gemini-2.5-pro": { input: 1.25, output: 10.0 },
-  // MiniMax fallback (default provider en AnthropicProvider)
+  // MiniMax fallback (modelo por defecto histórico)
   "MiniMax-M2.7": { input: 0.3, output: 1.2 },
   // Fallback genérico
   _default: { input: 3.0, output: 15.0 },

@@ -13,7 +13,7 @@ This is a pnpm + Turborepo monorepo.
 | Package | Purpose |
 |---|---|
 | `@slad/shared` | Zod schemas, granular `Permission` type, serializable contracts |
-| `@slad/model-providers` | Provider abstraction (Anthropic, OpenAI, Google) + `ModelAdapter` (`generateObject` / `generateText` with auto-fix JSON) |
+| `@slad/model-providers` | `ModelProvider` seam + `CliProvider` (spawns agent CLIs) + `ModelAdapter` (`generateObject` / `generateText` with auto-fix JSON) |
 | `@slad/tools` | `defineTool()`, `ToolRegistry`, 9 builtin tools (`fs.readFile`, `shell.exec`, …) |
 | `@slad/harness` | Execution harness: command classification, hooks, LDJSON audit log, `assertPermission()` |
 | `@slad/hitl` | Human-in-the-loop transports (TTY, none) |
@@ -36,12 +36,13 @@ corepack pnpm typecheck
 corepack pnpm test
 ```
 
-Copy `.env.example` to `.env` and set whichever provider keys you need:
+SLAD delegates model calls to a local agent CLI (`claude`, `codex`, …).
+Run `slad setup` (or any command — setup runs automatically) to pick the binary, or configure it via `.env`:
 
 ```bash
-ANTHROPIC_API_KEY=...
-OPENAI_API_KEY=...
-GOOGLE_API_KEY=...
+SLAD_CLI_BINARY=claude
+SLAD_CLI_ARGS=--print
+SLAD_CLI_PROMPT_MODE=arg
 SLAD_LOG_LEVEL=info
 ```
 
@@ -70,7 +71,7 @@ Common flags for `auto` / `work`:
 
 ```bash
 slad auto "<intent>" \
-  --provider anthropic        # anthropic | openai | google | cli
+  --agent claude              # CLI agent backend: claude | codex | gemini | agent
   --model claude-opus-4-7     # provider-specific model id
   --harness on                # off | on | strict
   --max-cost 5                # USD budget
@@ -91,7 +92,7 @@ corepack pnpm --filter @slad/pipeline test
 
 ## Using the Agent SDK
 
-The CLI is just one consumer. You can embed SLAD in your own code via `@slad/agent`.
+The CLI is just one consumer. You can embed SLAD in your own code via `createAgent()` from `@slad/pipeline`.
 
 ### Run the built-in SLAD pipeline
 
@@ -102,7 +103,7 @@ import { getProvider } from "@slad/model-providers";
 import { createHarness } from "@slad/harness";
 import { createHitlTransport } from "@slad/hitl";
 
-const provider = await getProvider("anthropic", process.env.ANTHROPIC_API_KEY);
+const provider = await getProvider("cli"); // spawns the agent binary from SLAD_CLI_* env
 const harness  = await createHarness({ mode: "on", maxPermission: "workspace" });
 const hitl     = createHitlTransport("tty");
 
@@ -217,7 +218,7 @@ Inside a stage they're available as `ctx.memory` and `ctx.telemetry`. Each stage
 
 - Local ESM imports use `.js` extensions in source.
 - Shared serializable contracts live in `packages/shared/src` — don't duplicate them.
-- After modifying a package's types, rebuild it before typechecking dependents (Turbo's `^build` dependency on `typecheck` handles this).
+- Typecheck resolves types from source (each package's `exports` maps `types` to `./src/index.ts`), so `pnpm typecheck` needs no prior build.
 - Tests use `node --test` with `tsx/esm` loader. Run a single file: `node --import tsx/esm --test packages/<pkg>/src/foo.test.ts`.
 
 ## License

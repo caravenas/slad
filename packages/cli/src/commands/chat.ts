@@ -2,7 +2,7 @@ import readline from "node:readline";
 import ora from "ora";
 import kleur from "kleur";
 import { input as promptInput, select } from "@inquirer/prompts";
-import { loadConfig, resolveProvider, getApiKey, getModel, getActiveAgentId } from "../core/config.js";
+import { loadConfig, resolveProvider, getModel, getActiveAgentId } from "../core/config.js";
 import { getSladProvider } from "../core/providers.js";
 import { log } from "../core/logger.js";
 import {
@@ -483,9 +483,8 @@ async function executeAction(
       if (!action.message) break;
       const config = loadConfig();
       const providerName = resolveProvider(opts.provider, opts.agent, config.defaultProvider, config.defaultAgent);
-      const apiKey = getApiKey(providerName);
       const model = opts.model ?? getModel(providerName);
-      const provider = await getSladProvider(providerName, apiKey ?? undefined);
+      const provider = await getSladProvider(providerName);
 
       // Smart routing: classify longer messages to detect pipeline intents.
       if (action.message.length > 20) {

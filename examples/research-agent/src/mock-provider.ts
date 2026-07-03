@@ -6,11 +6,11 @@ import type { ChatMessage, CompletionOptions, ModelProvider } from "@slad/model-
  *  - RESEARCH_PLANNER     → returns JSON parsed by `generateObject`
  *  - RESEARCH_SYNTHESIZER → returns a markdown report for `generateText`
  *
- * Swap this for `getProvider("anthropic", apiKey)` to run against a real model.
+ * Swap this for `getProvider("cli", apiKey)` to run against a real model.
  */
 export function createMockResearchProvider(): ModelProvider {
   return {
-    name: "anthropic",
+    name: "cli",
     async complete(messages: ChatMessage[], opts?: CompletionOptions): Promise<string> {
       const system = opts?.systemPrompt ?? "";
       const userContent = messages.map((m) => m.content).join("\n");

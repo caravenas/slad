@@ -1,16 +1,12 @@
 import { getProvider } from "@slad/model-providers";
 import type { ModelProvider } from "@slad/model-providers";
 import type { ProviderName as ProviderNameType } from "./types.js";
-import { CliProvider } from "./cli-provider.js";
 
 /**
  * Resolves the ModelProvider for a given provider name.
- * Handles "cli" locally (spawning the configured CLI binary) and delegates
- * all API providers to @slad/model-providers.
+ * Every provider is a CLI agent binary (codex, claude, …) spawned by
+ * CliProvider; the concrete backend is selected via SLAD_CLI_* env vars.
  */
-export async function getSladProvider(name: ProviderNameType, apiKey?: string): Promise<ModelProvider> {
-  if (name === "cli") {
-    return new CliProvider();
-  }
-  return getProvider(name, apiKey);
+export async function getSladProvider(name: ProviderNameType): Promise<ModelProvider> {
+  return getProvider(name);
 }

@@ -1,7 +1,7 @@
 import path from "node:path";
 import ora from "ora";
 import kleur from "kleur";
-import { getApiKey, getModel, loadConfig, resolveProvider, withPromptGuidance } from "../core/config.js";
+import { getModel, loadConfig, resolveProvider, withPromptGuidance } from "../core/config.js";
 import { getSladProvider } from "../core/providers.js";
 import { EXPLORER_SYSTEM } from "../agents/prompts.js";
 import { ExploreOutput, type ChatMessage } from "../core/types.js";
@@ -125,17 +125,10 @@ export async function exploreCommand(intent: string, opts: ExploreOpts): Promise
 
   const config = loadConfig();
   const providerName = resolveProvider(opts.provider, opts.agent, config.defaultProvider, config.defaultAgent);
-  const apiKey = getApiKey(providerName);
 
-  if (providerName !== "cli" && !apiKey) {
-    log.error(
-      `No se encontró API key para ${providerName}. Define la variable de entorno correspondiente.`,
-    );
-    process.exit(1);
-  }
 
   const model = opts.model ?? getModel(providerName);
-  const provider = await getSladProvider(providerName, apiKey ?? undefined);
+  const provider = await getSladProvider(providerName);
 
   log.title(`Explorer · ${providerName}${model ? ` · ${model}` : ""}`);
   log.dim(`intent: ${intent}`);

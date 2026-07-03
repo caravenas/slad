@@ -2,7 +2,7 @@ import ora from "ora";
 import kleur from "kleur";
 import { type SladPipelineStageId, buildSladPipeline, writeAutoReport } from "@slad/pipeline";
 import { createAgent } from "@slad/pipeline";
-import { getApiKey, getModel, loadConfig, resolveProvider } from "../core/config.js";
+import { getModel, loadConfig, resolveProvider } from "../core/config.js";
 import { type ModelProvider } from "@slad/model-providers";
 import { getSladProvider } from "../core/providers.js";
 import { log } from "../core/logger.js";
@@ -353,13 +353,8 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
     provider = opts._provider;
     model = opts.model;
   } else {
-    const apiKey = getApiKey(providerName);
-    if (providerName !== "cli" && !apiKey) {
-      log.error(`No se encontró API key para ${providerName}.`);
-      process.exit(1);
-    }
     model = opts.model ?? getModel(providerName);
-    provider = await getSladProvider(providerName, apiKey ?? undefined);
+    provider = await getSladProvider(providerName);
   }
 
   if (!opts.dryRun && !opts._provider && providerName !== "cli" && !provider.supportsToolUse) {

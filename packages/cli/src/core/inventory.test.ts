@@ -6,25 +6,13 @@ describe("generateInventory", () => {
   it("detecta todos los providers existentes", () => {
     const inv = generateInventory();
     const names = inv.providers.map((p) => p.name).sort();
-    assert.deepStrictEqual(names, ["anthropic", "gemini", "openai", "retry", "timeout"]);
+    assert.deepStrictEqual(names, ["cli", "retry", "timeout"]);
   });
 
   it("clasifica correctamente el tipo de cada provider", () => {
     const inv = generateInventory();
     const byName = Object.fromEntries(inv.providers.map((p) => [p.name, p.type]));
-    assert.strictEqual(byName["anthropic"], "api");
-    assert.strictEqual(byName["openai"], "api");
-    assert.strictEqual(byName["gemini"], "api");
-  });
-
-  it("anthropic provider referencia su SDK", () => {
-    const inv = generateInventory();
-    const anthropic = inv.providers.find((p) => p.name === "anthropic");
-    assert.ok(anthropic, "anthropic provider debe existir");
-    assert.ok(
-      anthropic.details.some((d) => d.includes("@anthropic-ai/sdk")),
-      "debe mencionar el SDK de anthropic",
-    );
+    assert.strictEqual(byName["cli"], "cli");
   });
 
   it("detecta commands con HITL", () => {

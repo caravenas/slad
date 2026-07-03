@@ -20,9 +20,7 @@ export type {
 export { ProviderError, isRetryable } from "./errors.js";
 export { retryWithBackoff } from "./retry.js";
 export { withTimeout, resolveApiTimeoutMs } from "./timeout.js";
-export { AnthropicProvider } from "./anthropic.js";
-export { OpenAIProvider } from "./openai.js";
-export { GeminiProvider } from "./gemini.js";
+export { CliProvider } from "./cli.js";
 
 export interface ToolUseOptions extends CompletionOptions {
   tools: ToolDefinition[];
@@ -40,25 +38,12 @@ export interface ModelProvider {
   supportsToolUse?: boolean;
 }
 
-export async function getProvider(name: ProviderName, apiKey?: string): Promise<ModelProvider> {
+export async function getProvider(name: ProviderName): Promise<ModelProvider> {
   switch (name) {
-    case "anthropic": {
-      if (!apiKey) throw new Error("Anthropic provider requiere ANTHROPIC_API_KEY.");
-      const { AnthropicProvider } = await import("./anthropic.js");
-      return new AnthropicProvider(apiKey);
+    case "cli": {
+      const { CliProvider } = await import("./cli.js");
+      return new CliProvider();
     }
-    case "openai": {
-      if (!apiKey) throw new Error("OpenAI provider requiere OPENAI_API_KEY.");
-      const { OpenAIProvider } = await import("./openai.js");
-      return new OpenAIProvider(apiKey);
-    }
-    case "gemini": {
-      if (!apiKey) throw new Error("Gemini provider requiere GEMINI_API_KEY o GOOGLE_API_KEY.");
-      const { GeminiProvider } = await import("./gemini.js");
-      return new GeminiProvider(apiKey);
-    }
-    case "cli":
-      throw new Error('El provider "cli" permanece en @slad/cli y no forma parte de @slad/model-providers.');
     default:
       throw new Error(`Provider no soportado: ${String(name)}`);
   }

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import ora from "ora";
 import kleur from "kleur";
-import { getApiKey, getModel, loadConfig, resolveProvider, withPromptGuidance } from "../core/config.js";
+import { getModel, loadConfig, resolveProvider, withPromptGuidance } from "../core/config.js";
 import { PlanOutput, type ChatMessage } from "../core/types.js";
 import { getSladProvider } from "../core/providers.js";
 import { PLANNER_SYSTEM } from "../agents/prompts.js";
@@ -219,14 +219,7 @@ export async function planCommand(opts: PlanOpts): Promise<void> {
 
   const config = loadConfig();
   const providerName = resolveProvider(opts.provider, opts.agent, config.defaultProvider, config.defaultAgent);
-  const apiKey = getApiKey(providerName);
 
-  if (providerName !== "cli" && !apiKey) {
-    log.error(
-      `No se encontró API key para ${providerName}. Define la variable de entorno correspondiente.`,
-    );
-    process.exit(1);
-  }
 
   let snapshot: { content: string; title: string };
   try {
@@ -237,7 +230,7 @@ export async function planCommand(opts: PlanOpts): Promise<void> {
   }
 
   const model = opts.model ?? getModel(providerName);
-  const provider = await getSladProvider(providerName, apiKey ?? undefined);
+  const provider = await getSladProvider(providerName);
 
   log.title(`Planner · ${providerName}${model ? ` · ${model}` : ""}`);
   log.dim(`snapshot: ${snapshot.title}`);

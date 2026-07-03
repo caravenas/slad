@@ -2,7 +2,7 @@
 import ora from "ora";
 import kleur from "kleur";
 import { runSladPipeline } from "@slad/pipeline";
-import { getApiKey, getModel, loadConfig, resolveProvider } from "../core/config.js";
+import { getModel, loadConfig, resolveProvider } from "../core/config.js";
 import { getSladProvider } from "../core/providers.js";
 import { log } from "../core/logger.js";
 import { writeArtifact, readArtifact } from "../persistence/index.js";
@@ -58,15 +58,10 @@ export async function runCommand(opts: RunOpts): Promise<void> {
 
   const config = loadConfig();
   const providerName = resolveProvider(opts.provider, opts.agent, config.defaultProvider, config.defaultAgent);
-  const apiKey = getApiKey(providerName);
 
-  if (providerName !== "cli" && !apiKey) {
-    log.error(`No se encontró API key para ${providerName}.`);
-    process.exit(1);
-  }
 
   const model = opts.model ?? getModel(providerName);
-  const provider = await getSladProvider(providerName, apiKey ?? undefined);
+  const provider = await getSladProvider(providerName);
 
   if (opts.tools !== false && providerName !== "cli" && !provider.supportsToolUse) {
     throw new ProviderError(

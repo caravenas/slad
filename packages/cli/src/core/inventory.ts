@@ -103,7 +103,7 @@ function scan(root: string): ProjectInventory {
 function scanProviders(root: string): InventoryProvider[] {
   const providerModelsDir = path.resolve(root, "..", "model-providers", "src");
   const descriptors = [
-    { dir: providerModelsDir, files: ["anthropic.ts", "openai.ts", "gemini.ts", "retry.ts", "timeout.ts"] },
+    { dir: providerModelsDir, files: ["cli.ts", "retry.ts", "timeout.ts"] },
   ];
 
   const providers: InventoryProvider[] = [];

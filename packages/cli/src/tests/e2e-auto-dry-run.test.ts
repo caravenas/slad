@@ -175,7 +175,7 @@ function makeMockProvider(): ModelProvider {
   const responses = [EXPLORE_FIXTURE, SNAPSHOT_FIXTURE, PLAN_FIXTURE];
 
   return {
-    name: "anthropic" as ProviderName,
+    name: "cli" as ProviderName,
     supportsToolUse: false,
     async complete(_messages: ChatMessage[], _opts?: CompletionOptions): Promise<string> {
       const response = responses[callCount % responses.length] ?? PLAN_FIXTURE;
@@ -188,7 +188,7 @@ function makeMockProvider(): ModelProvider {
 function makeSequenceProvider(responses: string[]): ModelProvider & { calls: string[] } {
   const calls: string[] = [];
   return {
-    name: "anthropic" as ProviderName,
+    name: "cli" as ProviderName,
     supportsToolUse: false,
     async complete(messages: ChatMessage[], _opts?: CompletionOptions): Promise<string> {
       calls.push(messages.map((message) => message.content).join("\n\n"));
@@ -276,7 +276,7 @@ describe("E2E: slad auto --dry-run (mock provider)", { concurrency: 1 }, () => {
     const mockProvider = makeMockProvider();
 
     await autoCommand("add sum function to math module", {
-      provider: "anthropic",
+      provider: "cli",
       model: "claude-sonnet-4-6",
       dryRun: true,
       fresh: true,
@@ -307,7 +307,7 @@ describe("E2E: slad auto --dry-run (mock provider)", { concurrency: 1 }, () => {
     const mockProvider = makeMockProvider();
 
     await autoCommand("add sum function to math module", {
-      provider: "anthropic",
+      provider: "cli",
       model: "claude-sonnet-4-6",
       dryRun: true,
       fresh: true,
@@ -334,7 +334,7 @@ describe("E2E: slad auto --dry-run (mock provider)", { concurrency: 1 }, () => {
     const mockProvider = makeMockProvider();
 
     await autoCommand("add sum function to math module", {
-      provider: "anthropic",
+      provider: "cli",
       model: "claude-sonnet-4-6",
       dryRun: true,
       fresh: true,
@@ -354,7 +354,7 @@ describe("E2E: slad auto --dry-run (mock provider)", { concurrency: 1 }, () => {
     const mockProvider = makeMockProvider();
 
     await autoCommand("add sum function to math module", {
-      provider: "anthropic",
+      provider: "cli",
       model: "claude-sonnet-4-6",
       dryRun: true,
       fresh: true,
@@ -368,7 +368,7 @@ describe("E2E: slad auto --dry-run (mock provider)", { concurrency: 1 }, () => {
     assert.ok(lines.length >= 1, "At least one budget history entry expected");
     const entry = JSON.parse(lines[0]!);
     assert.equal(entry.intent, "add sum function to math module");
-    assert.equal(entry.provider, "anthropic");
+    assert.equal(entry.provider, "cli");
   });
 });
 
@@ -378,7 +378,7 @@ describe("E2E: slad auto resume coverage", { concurrency: 1 }, () => {
       const provider = makeSequenceProvider([EXPLORE_FIXTURE, SNAPSHOT_FIXTURE, PLAN_FIXTURE]);
 
       await autoCommand("add sum function to math module", {
-        provider: "anthropic",
+        provider: "cli",
         model: "claude-sonnet-4-6",
         dryRun: true,
         fresh: true,
@@ -405,7 +405,7 @@ describe("E2E: slad auto resume coverage", { concurrency: 1 }, () => {
       const firstProvider = makeSequenceProvider([EXPLORE_FIXTURE, SNAPSHOT_FIXTURE, PLAN_BLOCKED_HITL_FIXTURE]);
 
       await autoCommand("add sum function to math module", {
-        provider: "anthropic",
+        provider: "cli",
         model: "claude-sonnet-4-6",
         dryRun: true,
         fresh: true,
@@ -431,7 +431,7 @@ describe("E2E: slad auto resume coverage", { concurrency: 1 }, () => {
 
       const retryProvider = makeSequenceProvider([PLAN_FIXTURE]);
       await autoCommand("add sum function to math module", {
-        provider: "anthropic",
+        provider: "cli",
         model: "claude-sonnet-4-6",
         dryRun: true,
         skipLearn: true,
@@ -463,7 +463,7 @@ describe("E2E: slad auto resume coverage", { concurrency: 1 }, () => {
       ]);
 
       await autoCommand("add sum function to math module", {
-        provider: "anthropic",
+        provider: "cli",
         model: "claude-sonnet-4-6",
         skipLearn: true,
         fresh: true,
@@ -483,7 +483,7 @@ describe("E2E: slad auto resume coverage", { concurrency: 1 }, () => {
 
       const retryProvider = makeSequenceProvider([RUN_T2_COMPLETED_FIXTURE]);
       await autoCommand("add sum function to math module", {
-        provider: "anthropic",
+        provider: "cli",
         model: "claude-sonnet-4-6",
         skipLearn: true,
         classify: false,
@@ -514,7 +514,7 @@ describe("E2E: slad auto resume coverage", { concurrency: 1 }, () => {
       ]);
 
       await autoCommand("add sum function to math module", {
-        provider: "anthropic",
+        provider: "cli",
         model: "claude-sonnet-4-6",
         dryRun: true,
         fresh: true,

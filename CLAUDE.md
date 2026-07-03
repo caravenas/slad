@@ -5,7 +5,7 @@ SLAD is a pnpm workspace with Turborepo orchestration.
 ## Packages
 
 - `packages/shared` (`@slad/shared`): Zod schemas, shared TypeScript types, and constants for the SLAD pipeline.
-- `packages/model-providers` (`@slad/model-providers`): `ModelProvider` abstraction + `ModelAdapter` (`generateObject` / `generateText`).
+- `packages/model-providers` (`@slad/model-providers`): `ModelProvider` seam + `CliProvider` (spawns agent CLI binaries) + `ModelAdapter` (`generateObject` / `generateText`).
 - `packages/tools` (`@slad/tools`): `defineTool()`, `ToolRegistry`, builtin tools.
 - `packages/harness` (`@slad/harness`): execution harness — command classification, hooks, `assertPermission()`, LDJSON audit log.
 - `packages/hitl` (`@slad/hitl`): human-in-the-loop transports (TTY, none).

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { ModelProvider } from "@slad/model-providers";
+import type { ModelProvider } from "./index.js";
 import type { ChatMessage } from "./types.js";
 
 function envStr(key: string): string {

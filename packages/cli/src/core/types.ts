@@ -110,7 +110,7 @@ export const DiscoveryResult = z.object({
 export type DiscoveryResult = z.infer<typeof DiscoveryResult>;
 
 export const DevAgentConfig = z.object({
-  defaultProvider: ProviderName.default("anthropic"),
+  defaultProvider: ProviderName.default("cli"),
   defaultAgent: AgentName.optional().describe("Agente CLI a usar por defecto cuando no se pasa --agent"),
   wikiPath: z
     .string()

@@ -7,9 +7,6 @@ import { DEFAULT_AGENT_ID } from "@slad/shared";
 import { backendEnvPatch, CliBackendId } from "./backend-registry.js";
 
 const DEFAULT_MODELS: Record<ProviderNameType, string> = {
-  anthropic: "MiniMax-M2.7",
-  openai: "gpt-4o",
-  gemini: "gemini-1.5-pro",
   cli: "",
 };
 
@@ -105,40 +102,12 @@ export function loadConfig(): DevAgentConfig {
 }
 
 /**
- * Pull the API key for a given provider from the environment.
- * Returns null if missing — commands decide how to handle it.
- */
-export function getApiKey(provider: ProviderNameType): string | null {
-  const configuredEnv = settingsValue<string>(["providers", "apiKeyEnv", provider]);
-  if (configuredEnv) return envValue(configuredEnv) ?? null;
-  switch (provider) {
-    case "anthropic":
-      return envValue("ANTHROPIC_API_KEY") ?? null;
-    case "openai":
-      return envValue("OPENAI_API_KEY") ?? null;
-    case "gemini":
-      return envValue("GEMINI_API_KEY") ?? envValue("GOOGLE_API_KEY") ?? null;
-    case "cli":
-      return null;
-  }
-}
-
-/**
  * Resolve the model from environment variables.
  * Provider-specific vars win over the shared fallback.
  */
 export function getModel(provider: ProviderNameType): string {
   const configured = settingsValue<string>(["providers", "models", provider]);
-  switch (provider) {
-    case "anthropic":
-      return envValue("ANTHROPIC_MODEL") ?? envValue("SLAD_MODEL") ?? configured ?? DEFAULT_MODELS.anthropic;
-    case "openai":
-      return envValue("OPENAI_MODEL") ?? envValue("SLAD_MODEL") ?? configured ?? DEFAULT_MODELS.openai;
-    case "gemini":
-      return envValue("GEMINI_MODEL") ?? envValue("GOOGLE_MODEL") ?? envValue("SLAD_MODEL") ?? configured ?? DEFAULT_MODELS.gemini;
-    case "cli":
-      return envValue("CLI_MODEL") ?? configured ?? DEFAULT_MODELS.cli;
-  }
+  return envValue("CLI_MODEL") ?? envValue("SLAD_MODEL") ?? configured ?? DEFAULT_MODELS[provider];
 }
 
 export function resolveProvider(
@@ -148,8 +117,7 @@ export function resolveProvider(
   defaultAgent?: string,
 ): ProviderNameType {
   // When defaultAgent is set (not an explicit --agent flag), configure the CLI
-  // binary env vars so the run stage can use it, but keep the API provider for
-  // the reasoning stages (explore, snapshot, plan, learn, evolve) that need getProvider().
+  // binary env vars so every stage runs through that agent backend.
   if (!agent && defaultAgent) {
     applyAgentEnv(AgentName.parse(defaultAgent));
     return ProviderName.parse(provider ?? defaultProvider);

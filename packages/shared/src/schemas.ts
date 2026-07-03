@@ -45,7 +45,7 @@ export const ToolRisk = z.enum(["low", "medium", "high"]);
 export type ToolRisk = z.infer<typeof ToolRisk>;
 
 
-export const ProviderName = z.enum(["anthropic", "openai", "gemini", "cli"]);
+export const ProviderName = z.enum(["cli"]);
 export type ProviderName = z.infer<typeof ProviderName>;
 
 export const AgentName = z.enum(["codex", "claude", "gemini", "agent"]);
@@ -1008,14 +1008,8 @@ export const SladSettings = z.object({
   activeAgentId: z.string().default("developer"),
   profiles: z.array(SladProfile).default([]),
   providers: z.object({
-    defaultProvider: ProviderName.default("anthropic"),
+    defaultProvider: ProviderName.default("cli"),
     models: z.record(ProviderName, z.string()).default({}),
-    apiKeyEnv: z.record(ProviderName, z.string()).default({
-      anthropic: "ANTHROPIC_API_KEY",
-      openai: "OPENAI_API_KEY",
-      gemini: "GEMINI_API_KEY",
-      cli: "",
-    }),
   }).default({}),
   harness: SladHarnessSettings.default({}),
   paths: z.object({
