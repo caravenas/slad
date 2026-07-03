@@ -159,14 +159,11 @@ function applyAgentEnv(agent: import("@slad/shared").AgentName, fallbackBinary?:
   if (agent === "codex" || agent === "claude" || agent === "pi") {
     const model = envValue("CLI_MODEL") ?? configuredAgentModel ?? configuredCliModel ?? (agent === "claude" ? "sonnet" : undefined);
     const envPatch = backendEnvPatch(CliBackendId.parse(agent), model, configuredBinary);
-    if (process.env.SLAD_CLI_INHERIT_API_KEYS) delete envPatch.SLAD_CLI_INHERIT_API_KEYS;
     Object.assign(process.env, envPatch);
-    process.env.SLAD_CLI_INHERIT_API_KEYS ??= "false";
     return;
   }
 
   process.env.SLAD_CLI_MODEL_ARG = "--model";
-  process.env.SLAD_CLI_INHERIT_API_KEYS ??= "false";
   switch (agent) {
     case "gemini":
       process.env.SLAD_CLI_BINARY = "gemini";

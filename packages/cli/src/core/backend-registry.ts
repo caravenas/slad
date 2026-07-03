@@ -450,7 +450,6 @@ export function backendEnvPatch(provider: CliBackendId | string, model?: string,
     SLAD_CLI_ARGS: backend.defaultArgs.join(" "),
     SLAD_CLI_PROMPT_MODE: backend.promptMode,
     SLAD_CLI_MODEL_ARG: backend.modelArg,
-    SLAD_CLI_INHERIT_API_KEYS: "false",
   };
   if (model?.trim()) env.CLI_MODEL = model.trim();
   if (backend.id === "codex" && !model?.trim()) env.CLI_MODEL = "";

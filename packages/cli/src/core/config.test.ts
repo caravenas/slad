@@ -53,7 +53,7 @@ describe("config", () => {
     const savedKeys = [
       "PATH", "HOME", "SLAD_WORKSPACE", "SLAD_CLI_BINARY", "SLAD_CLI_ARGS",
       "SLAD_CLI_PROMPT_MODE", "SLAD_CLI_MODEL_ARG", "SLAD_DEFAULT_AGENT",
-      "SLAD_DEFAULT_PROVIDER", "SLAD_CLI_INHERIT_API_KEYS", "CLI_MODEL",
+      "SLAD_DEFAULT_PROVIDER", "CLI_MODEL",
     ];
     const saved = Object.fromEntries(savedKeys.map((k) => [k, process.env[k]]));
 

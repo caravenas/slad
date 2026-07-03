@@ -981,7 +981,6 @@ export const SladSettings = z.object({
   runtime: z.object({
     apiTimeoutMs: z.number().int().positive().optional(),
     cliTimeoutMs: z.number().int().positive().optional(),
-    cliInheritApiKeys: z.boolean().default(false),
     cliArgs: z.record(z.string(), z.string()).default({}),
   }).default({}),
 });
