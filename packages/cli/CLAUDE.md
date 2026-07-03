@@ -10,7 +10,8 @@ Node ESM CLI for the SLAD pipeline: `explore -> snapshot -> plan -> run -> learn
 - `src/models`: provider abstraction and vendor adapters.
 - `src/core/types.ts`: compatibility bridge. Shared schemas are re-exported from `@slad/shared`; CLI-only schemas remain here.
 - `src/core/session.ts`: session state CRUD.
-- `src/harness`: execution harness and audit logic.
+
+Execution harness and audit logic live in `@slad/harness`, not in this package.
 
 ## Commands
 

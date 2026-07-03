@@ -7,7 +7,7 @@ import { type ModelProvider } from "@slad/model-providers";
 import { getSladProvider } from "../core/providers.js";
 import { log } from "../core/logger.js";
 import { createHarness } from "@slad/harness";
-import { loadHarnessConfig } from "../harness/config.js";
+import { loadHarnessConfig } from "@slad/harness";
 
 import {
   autoResolveExplore,

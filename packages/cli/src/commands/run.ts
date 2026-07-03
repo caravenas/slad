@@ -9,7 +9,7 @@ import { writeArtifact, readArtifact } from "../persistence/index.js";
 import { pathForArtifact } from "../persistence/layout.js";
 import { createHitlTransport } from "@slad/hitl";
 import { createHarness } from "@slad/harness";
-import { loadHarnessConfig } from "../harness/config.js";
+import { loadHarnessConfig } from "@slad/harness";
 import * as prompts from "../agents/prompts.js";
 import { getActiveSession, appendArtifact, saveSession } from "../core/session.js";
 import type { RunOutput } from "../core/types.js";

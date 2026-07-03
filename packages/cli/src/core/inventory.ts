@@ -312,7 +312,7 @@ function scanCache(root: string): ProjectInventory["cacheSystem"] {
 // ─── Harness ──────────────────────────────────────────────────────────────────
 
 function scanHarness(root: string): ProjectInventory["harness"] {
-  const harnessDir = path.join(root, "src", "harness");
+  const harnessDir = path.resolve(root, "..", "harness", "src");
   const enabled = fs.existsSync(harnessDir);
 
   const modes: string[] = [];
