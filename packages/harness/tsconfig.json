@@ -7,6 +7,5 @@
     "rootDir": "./src"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"],
-  "references": [{ "path": "../shared" }, { "path": "../audit-log" }]
+  "exclude": ["node_modules", "dist"]
 }

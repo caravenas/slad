@@ -4,20 +4,8 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "outDir": "dist",
-    "rootDir": "src",
-    "composite": true
+    "rootDir": "src"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"],
-  "references": [
-    { "path": "../shared" },
-    { "path": "../pipeline" },
-    { "path": "../model-providers" },
-    { "path": "../memory" },
-    { "path": "../telemetry" },
-    { "path": "../tools" },
-    { "path": "../harness" },
-    { "path": "../hitl" },
-    { "path": "../cache" }
-  ]
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }
