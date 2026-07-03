@@ -163,6 +163,8 @@ pipelineCmd
   .option("--parallel", "Ejecutar el plan en olas paralelas: un worker CLI por tarea (ventana tmux si $TMUX está seteado)")
   .option("--max-parallel <n>", "Máximo de tareas paralelas simultáneas (default: 3)", parseInt)
   .option("--strict-ownership", "Marcar como failed las olas que tocan archivos fuera de los declarados en el plan")
+  .option("--worktrees", "Aislar cada tarea en su propio git worktree y aplicar el resultado como cambios staged (requiere --parallel y HEAD commiteado)")
+  .option("--keep-worktrees", "Conservar los worktrees/ramas de la sesión tras el run (debug)")
   .option("--json", "Imprimir JSON plano en stdout en lugar del resumen legible")
   .option("--skip-session", "Ignorar sesión activa (comportamiento v0.1.0)")
   .option("--harness <mode>", "Modo del arnés de seguridad (off | on | strict)", "off")

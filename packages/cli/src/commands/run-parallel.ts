@@ -6,6 +6,18 @@ import kleur from "kleur";
 import { RunOutput, type PlanOutput, type PlanTask } from "../core/types.js";
 import { BUILDER_REVIEWER_SYSTEM } from "../agents/prompts.js";
 import { getNextWave, autoSkipDependents, type TaskStatus } from "./dag.js";
+import {
+  addTaskWorktree,
+  assertWorktreeReady,
+  commitTaskWork,
+  hasUncommittedChanges,
+  integrationTip,
+  mergeTaskBranch,
+  removeSessionWorktrees,
+  setupIntegration,
+  squashIntoMain,
+  type IntegrationSetup,
+} from "./worktrees.js";
 
 const exec = promisify(execFile);
 
@@ -18,19 +30,37 @@ export interface ParallelRunOptions {
   cwd: string;
   maxParallel: number;
   strictOwnership: boolean;
+  /**
+   * Isolate each task in its own git worktree branched from a session
+   * integration branch, merge results sequentially, and squash the final
+   * state into the main worktree without committing. Requires a committed
+   * HEAD; enables per-task (instead of per-wave) ownership attribution.
+   */
+  useWorktrees?: boolean;
+  /** Keep the session worktrees/branches after the run (debugging). */
+  keepWorktrees?: boolean;
   /** Per-task timeout. Default: 15 minutes. */
   taskTimeoutMs?: number;
   /** Called with each task's RunOutput as it completes (persistence hook). */
   onTaskOutput?: (output: RunOutput) => Promise<void>;
   /** Test seam: replaces real worker execution (tmux/child process). */
   runWorker?: WorkerRunner;
-  /** Test seam: replaces `git status --porcelain` parsing. */
+  /** Test seam: replaces `git status --porcelain` parsing (shared-worktree mode only). */
   listChangedFiles?: () => Promise<Set<string>>;
   /** Test seam: silences table output. */
   print?: (line: string) => void;
 }
 
-export type WorkerRunner = (task: PlanTask, workerDir: string, timeoutMs: number) => Promise<{
+export interface WorkerSpec {
+  task: PlanTask;
+  /** Directory for prompt/output/sentinel files (always under the main repo). */
+  workerDir: string;
+  /** Directory the agent works in: the main repo, or the task's worktree. */
+  workspace: string;
+  timeoutMs: number;
+}
+
+export type WorkerRunner = (spec: WorkerSpec) => Promise<{
   exitCode: number;
   stdout: string;
 }>;
@@ -189,8 +219,7 @@ async function waitForSentinel(exitCodePath: string, timeoutMs: number): Promise
   return null;
 }
 
-const defaultRunWorker = (workspace: string): WorkerRunner => {
-  return async (task, workerDir, timeoutMs) => {
+const defaultRunWorker: WorkerRunner = async ({ task, workerDir, workspace, timeoutMs }) => {
     const scriptPath = path.join(workerDir, "worker.sh");
     const outputPath = path.join(workerDir, "output.txt");
     const exitCodePath = path.join(workerDir, "exit-code");
@@ -224,7 +253,6 @@ const defaultRunWorker = (workspace: string): WorkerRunner => {
       return { exitCode: 124, stdout: stdout + "\n[slad] worker timed out" };
     }
     return { exitCode, stdout };
-  };
 };
 
 // ─── Status table ─────────────────────────────────────────────────────────────
@@ -257,6 +285,19 @@ export function renderStatusTable(
 
 // ─── Orchestrator ─────────────────────────────────────────────────────────────
 
+/** Per-task ownership check for worktree mode (empty files = owns everything). */
+function taskOwnershipViolations(changedFiles: string[], task: PlanTask): string[] {
+  if (task.files.length === 0) return [];
+  const owned = new Set(task.files);
+  return changedFiles
+    .filter(
+      (file) =>
+        !owned.has(file) &&
+        !OWNERSHIP_EXEMPT_PREFIXES.some((prefix) => file === prefix || file.startsWith(prefix)),
+    )
+    .sort();
+}
+
 export async function runParallel(options: ParallelRunOptions): Promise<ParallelRunResult> {
   const {
     plan,
@@ -264,12 +305,23 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
     cwd,
     maxParallel,
     strictOwnership,
+    useWorktrees = false,
+    keepWorktrees = false,
     taskTimeoutMs = 15 * 60_000,
     onTaskOutput,
     print = console.log,
   } = options;
-  const runWorker = options.runWorker ?? defaultRunWorker(cwd);
+  const runWorker = options.runWorker ?? defaultRunWorker;
   const listChangedFiles = options.listChangedFiles ?? (() => gitChangedFiles(cwd));
+
+  let integration: IntegrationSetup | null = null;
+  if (useWorktrees) {
+    await assertWorktreeReady(cwd);
+    if (await hasUncommittedChanges(cwd)) {
+      print(kleur.yellow("⚠ Hay cambios sin commitear: los workers parten de HEAD y no los verán."));
+    }
+    integration = await setupIntegration(cwd, sessionId);
+  }
 
   const tasksRoot = path.join(cwd, ".slad-os", "sessions", sessionId, "tasks");
   const state = new Map<string, TaskStatus>(plan.tasks.map((task) => [task.id, "pending"]));
@@ -285,33 +337,74 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
     for (const task of wave) waveByTask.set(task.id, waveNumber);
     print(kleur.bold(`\nWave ${waveNumber}: `) + wave.map((task) => task.id).join(", "));
 
-    const beforeWave = await listChangedFiles();
-    const ownedByWave = new Set(wave.flatMap((task) => task.files));
+    // Worktrees are created sequentially (git locks the repo per worktree add),
+    // branching from the integration tip so dependents see prior waves' work.
+    const baseRef = integration ? await integrationTip(integration) : null;
+    const specs: WorkerSpec[] = [];
+    for (const task of wave) {
+      const workerDir = path.join(tasksRoot, task.id);
+      fs.mkdirSync(workerDir, { recursive: true });
+      fs.writeFileSync(path.join(workerDir, "prompt.txt"), buildHandoffPrompt(task, plan));
+      const workspace = integration
+        ? await addTaskWorktree(cwd, sessionId, task.id, baseRef!)
+        : cwd;
+      specs.push({ task, workerDir, workspace, timeoutMs: taskTimeoutMs });
+    }
+
+    const beforeWave = integration ? null : await listChangedFiles();
 
     const waveOutputs = await Promise.all(
-      wave.map(async (task) => {
-        const workerDir = path.join(tasksRoot, task.id);
-        fs.mkdirSync(workerDir, { recursive: true });
-        fs.writeFileSync(path.join(workerDir, "prompt.txt"), buildHandoffPrompt(task, plan));
-        const { exitCode, stdout } = await runWorker(task, workerDir, taskTimeoutMs);
-        return parseWorkerOutput(task, stdout, exitCode);
+      specs.map(async (spec) => {
+        const { exitCode, stdout } = await runWorker(spec);
+        return parseWorkerOutput(spec.task, stdout, exitCode);
       }),
     );
 
-    const afterWave = await listChangedFiles();
-    const violations = computeOwnershipViolations(beforeWave, afterWave, ownedByWave);
-    if (violations.length > 0) {
-      const note = `ownership-violation: wave ${waveNumber} touched undeclared files: ${violations.join(", ")}`;
-      print(kleur.yellow(`⚠ ${note}`));
-      for (const output of waveOutputs) output.reviewerNotes.push(note);
+    if (integration) {
+      // Per-task: commit the worktree, attribute ownership, merge sequentially.
+      for (const [index, task] of wave.entries()) {
+        const output = waveOutputs[index]!;
+        const commit = await commitTaskWork(specs[index]!.workspace, task.id, task.title);
+        if (output.changedFiles.length === 0) output.changedFiles = commit.changedFiles;
+
+        const violations = taskOwnershipViolations(commit.changedFiles, task);
+        if (violations.length > 0) {
+          const note = `ownership-violation: ${task.id} touched undeclared files: ${violations.join(", ")}`;
+          print(kleur.yellow(`⚠ ${note}`));
+          output.reviewerNotes.push(note);
+          if (strictOwnership && output.status === "completed") {
+            output.status = "failed";
+            output.summary += " [failed by --strict-ownership]";
+          }
+        }
+
+        if (output.status === "completed" && commit.committed) {
+          const merged = await mergeTaskBranch(integration, sessionId, task.id);
+          if (!merged) {
+            output.status = "failed";
+            output.summary += " [merge conflict al integrar]";
+            output.reviewerNotes.push(`merge-conflict: la rama de ${task.id} no se pudo integrar`);
+          }
+        }
+      }
+    } else {
+      const afterWave = await listChangedFiles();
+      const violations = computeOwnershipViolations(beforeWave!, afterWave, new Set(wave.flatMap((task) => task.files)));
+      if (violations.length > 0) {
+        const note = `ownership-violation: wave ${waveNumber} touched undeclared files: ${violations.join(", ")}`;
+        print(kleur.yellow(`⚠ ${note}`));
+        for (const output of waveOutputs) {
+          output.reviewerNotes.push(note);
+          if (strictOwnership && output.status === "completed") {
+            output.status = "failed";
+            output.summary += " [failed by --strict-ownership]";
+          }
+        }
+      }
     }
 
     for (const [index, task] of wave.entries()) {
       const output = waveOutputs[index]!;
-      if (strictOwnership && violations.length > 0 && output.status === "completed") {
-        output.status = "failed";
-        output.summary += " [failed by --strict-ownership]";
-      }
       state.set(task.id, output.status === "completed" ? "done" : "failed");
       if (output.status !== "completed") autoSkipDependents(plan.tasks, state, task.id);
       outputs.push(output);
@@ -319,6 +412,20 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
     }
 
     print(renderStatusTable(plan.tasks, state, waveByTask));
+  }
+
+  if (integration) {
+    const squashError = await squashIntoMain(cwd, integration);
+    if (squashError) {
+      print(kleur.red(
+        `⚠ No se pudo aplicar el resultado al worktree principal: ${squashError}\n` +
+        `  Los cambios integrados quedan en la rama ${integration.integrationBranch}.`,
+      ));
+    } else if (keepWorktrees) {
+      print(kleur.dim(`  worktrees conservados en .slad-os/sessions/${sessionId}/worktrees/`));
+    } else {
+      await removeSessionWorktrees(cwd, sessionId);
+    }
   }
 
   const statuses = [...state.values()];

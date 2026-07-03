@@ -34,6 +34,8 @@ export interface RunOpts {
   parallel?: boolean;
   maxParallel?: number;
   strictOwnership?: boolean;
+  worktrees?: boolean;
+  keepWorktrees?: boolean;
 }
 
 export async function runCommand(opts: RunOpts): Promise<void> {
@@ -79,6 +81,8 @@ export async function runCommand(opts: RunOpts): Promise<void> {
       cwd,
       maxParallel: opts.maxParallel ?? 3,
       strictOwnership: opts.strictOwnership ?? false,
+      useWorktrees: opts.worktrees ?? false,
+      keepWorktrees: opts.keepWorktrees ?? false,
       onTaskOutput: async (output) => {
         const ref = await writeArtifact("run", output, { sessionId: currentSession?.id ?? "adhoc" });
         if (currentSession) {

@@ -92,6 +92,11 @@ Tasks that declare no `files` conservatively run alone.
 Worker prompts, transcripts, and exit codes land under `.slad-os/sessions/<id>/tasks/<taskId>/`.
 After each wave, `git status` is compared against the wave's declared files; violations are warned by default or fail the wave with `--strict-ownership`.
 
+Add `--worktrees` for real isolation: each task runs in its own git worktree branched from a session integration branch (`slad/<sessionId>/…`), so workers physically can't touch each other's files and ownership is attributed per task.
+Successful tasks are committed in their worktree and merged sequentially into the integration branch (dependents branch from the updated tip, so they see prior waves' work); at the end the result is squashed into the main worktree as staged, uncommitted changes — you review and commit.
+Requires a committed HEAD; uncommitted changes in the main worktree are not visible to workers.
+`--keep-worktrees` preserves the session worktrees and branches for debugging.
+
 Filter to one workspace package:
 
 ```bash

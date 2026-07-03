@@ -1,4 +1,5 @@
 import { describe, it } from "node:test";
+import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -130,7 +131,7 @@ describe("runParallel", () => {
       strictOwnership: false,
       print: () => undefined,
       listChangedFiles: async () => new Set(),
-      runWorker: async (t) => {
+      runWorker: async ({ task: t }) => {
         waveBuffer.push(t.id);
         await new Promise((resolve) => setImmediate(resolve));
         if (waveBuffer.length > 0) {
@@ -158,7 +159,7 @@ describe("runParallel", () => {
       strictOwnership: false,
       print: () => undefined,
       listChangedFiles: async () => new Set(),
-      runWorker: async (t) => ({ exitCode: t.id === "T1" ? 1 : 0, stdout: "" }),
+      runWorker: async ({ task: t }) => ({ exitCode: t.id === "T1" ? 1 : 0, stdout: "" }),
     });
 
     assert.equal(result.status, "failed");
@@ -178,7 +179,7 @@ describe("runParallel", () => {
       strictOwnership: true,
       print: () => undefined,
       listChangedFiles: async () => (call++ === 0 ? new Set() : new Set(["rogue.ts"])),
-      runWorker: async (t) => ({ exitCode: 0, stdout: workerJson(t.id) }),
+      runWorker: async ({ task: t }) => ({ exitCode: 0, stdout: workerJson(t.id) }),
     });
 
     assert.equal(result.status, "failed");
@@ -198,7 +199,7 @@ describe("runParallel", () => {
       strictOwnership: false,
       print: () => undefined,
       listChangedFiles: async () => (call++ === 0 ? new Set() : new Set(["rogue.ts"])),
-      runWorker: async (t) => ({ exitCode: 0, stdout: workerJson(t.id) }),
+      runWorker: async ({ task: t }) => ({ exitCode: 0, stdout: workerJson(t.id) }),
     });
 
     assert.equal(result.status, "completed");
@@ -220,7 +221,7 @@ describe("runParallel", () => {
       onTaskOutput: async (output) => {
         persisted.push(output.taskId);
       },
-      runWorker: async (t) => ({ exitCode: 0, stdout: workerJson(t.id) }),
+      runWorker: async ({ task: t }) => ({ exitCode: 0, stdout: workerJson(t.id) }),
     });
 
     assert.deepEqual(persisted, ["T1"]);
@@ -235,5 +236,137 @@ describe("computeOwnershipViolations — exenciones", () => {
   it("ignora el estado propio de slad (.slad-os/, docs/)", () => {
     const after = new Set([".slad-os/", ".slad-os/sessions/x/tasks/T1/output.txt", "docs/log/runs/r.json", "rogue.ts"]);
     assert.deepEqual(computeOwnershipViolations(new Set(), after, new Set()), ["rogue.ts"]);
+  });
+});
+
+describe("runParallel — worktrees", () => {
+  function git(cwd: string, ...args: string[]): string {
+    return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
+  }
+
+  function makeRepo(): string {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "slad-wt-"));
+    git(cwd, "init", "-q");
+    fs.writeFileSync(path.join(cwd, "README.md"), "# repo\n");
+    fs.writeFileSync(path.join(cwd, ".gitignore"), ".slad-os/\n");
+    git(cwd, "add", "-A");
+    git(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init");
+    return cwd;
+  }
+
+  /** Worker that writes its owned files inside its (isolated) workspace. */
+  function writingWorker(observed: Record<string, string[]>) {
+    return async ({ task, workspace }: { task: PlanTask; workspace: string }) => {
+      observed[task.id] = fs.readdirSync(workspace).filter((f) => f !== ".git").sort();
+      for (const file of task.files) {
+        fs.writeFileSync(path.join(workspace, file), `${task.id} wrote ${file}\n`);
+      }
+      return { exitCode: 0, stdout: workerJson(task.id) };
+    };
+  }
+
+  it("aísla tareas, propaga olas previas y aplica squash sin commitear", async () => {
+    const cwd = makeRepo();
+    const headBefore = git(cwd, "rev-parse", "HEAD");
+    const observed: Record<string, string[]> = {};
+
+    const result = await runParallel({
+      plan: plan([
+        task("T1", ["a.txt"]),
+        task("T2", ["b.txt"]),
+        task("T3", ["c.txt"], ["T1", "T2"]),
+      ]),
+      sessionId: "wt1",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: false,
+      useWorktrees: true,
+      print: () => undefined,
+      runWorker: writingWorker(observed) as never,
+    });
+
+    assert.equal(result.status, "completed");
+    // Isolation: T1's worktree did not contain T2's file while running.
+    assert.deepEqual(observed["T1"], [".gitignore", "README.md"]);
+    // Propagation: T3's worktree (wave 2) contains wave 1 results.
+    assert.deepEqual(observed["T3"], [".gitignore", "README.md", "a.txt", "b.txt"]);
+    // Squash: files landed in the main worktree, staged, without new commits.
+    assert.equal(git(cwd, "rev-parse", "HEAD"), headBefore);
+    assert.equal(fs.readFileSync(path.join(cwd, "a.txt"), "utf8"), "T1 wrote a.txt\n");
+    const staged = git(cwd, "diff", "--cached", "--name-only").split("\n").sort();
+    assert.deepEqual(staged, ["a.txt", "b.txt", "c.txt"]);
+    // changedFiles attributed per task from its commit.
+    assert.deepEqual(result.outputs.find((o) => o.taskId === "T3")!.changedFiles, ["c.txt"]);
+    // Cleanup: only the main worktree remains, no slad branches.
+    assert.equal(git(cwd, "worktree", "list").split("\n").length, 1);
+    assert.equal(git(cwd, "for-each-ref", "refs/heads/slad/", "--format=%(refname)"), "");
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("strict ownership: la tarea infractora falla y su trabajo no se integra", async () => {
+    const cwd = makeRepo();
+    const result = await runParallel({
+      plan: plan([task("T1", ["a.txt"])]),
+      sessionId: "wt2",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: true,
+      useWorktrees: true,
+      print: () => undefined,
+      runWorker: (async ({ task: t, workspace }: { task: PlanTask; workspace: string }) => {
+        fs.writeFileSync(path.join(workspace, "a.txt"), "ok\n");
+        fs.writeFileSync(path.join(workspace, "rogue.txt"), "not mine\n");
+        return { exitCode: 0, stdout: workerJson(t.id) };
+      }) as never,
+    });
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.outputs[0]!.status, "failed");
+    assert.ok(result.outputs[0]!.reviewerNotes.some((n) => n.includes("rogue.txt")));
+    assert.ok(!fs.existsSync(path.join(cwd, "a.txt")), "el trabajo infractor no debe integrarse");
+    assert.ok(!fs.existsSync(path.join(cwd, "rogue.txt")));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("una tarea sin cambios completa sin generar merge", async () => {
+    const cwd = makeRepo();
+    const headBefore = git(cwd, "rev-parse", "HEAD");
+    const result = await runParallel({
+      plan: plan([task("T1", ["a.txt"])]),
+      sessionId: "wt3",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: false,
+      useWorktrees: true,
+      print: () => undefined,
+      runWorker: (async ({ task: t }: { task: PlanTask }) => ({ exitCode: 0, stdout: workerJson(t.id) })) as never,
+    });
+
+    assert.equal(result.status, "completed");
+    assert.equal(git(cwd, "rev-parse", "HEAD"), headBefore);
+    assert.equal(git(cwd, "status", "--porcelain"), "");
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("un rerun de la misma sesión limpia worktrees y ramas anteriores", async () => {
+    const cwd = makeRepo();
+    const opts = {
+      plan: plan([task("T1", ["a.txt"])]),
+      sessionId: "wt4",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: false,
+      useWorktrees: true,
+      keepWorktrees: true, // leave leftovers on purpose
+      print: () => undefined,
+      runWorker: writingWorker({}) as never,
+    };
+    assert.equal((await runParallel(opts)).status, "completed");
+    // Reset the staged squash so the second run starts clean.
+    git(cwd, "reset", "-q", "--hard", "HEAD");
+    const second = await runParallel({ ...opts, keepWorktrees: false });
+    assert.equal(second.status, "completed");
+    assert.equal(fs.readFileSync(path.join(cwd, "a.txt"), "utf8"), "T1 wrote a.txt\n");
+    fs.rmSync(cwd, { recursive: true, force: true });
   });
 });
