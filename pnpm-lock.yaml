@@ -15,41 +15,6 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
-  apps/dashboard:
-    dependencies:
-      '@slad/pipeline':
-        specifier: workspace:*
-        version: link:../../packages/pipeline
-      zod:
-        specifier: ^3.23.8
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.1
-        version: 22.19.19
-      tsx:
-        specifier: ^4.19.2
-        version: 4.21.0
-      typescript:
-        specifier: 5.6.3
-        version: 5.6.3
-
-  apps/docs:
-    dependencies:
-      '@slad/pipeline':
-        specifier: workspace:*
-        version: link:../../packages/pipeline
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.1
-        version: 22.19.19
-      tsx:
-        specifier: ^4.19.2
-        version: 4.21.0
-      typescript:
-        specifier: 5.6.3
-        version: 5.6.3
-
   examples/research-agent:
     dependencies:
       '@slad/agent':
