@@ -92,6 +92,8 @@ slad pipeline run --parallel --strict-ownership
 
 After each wave (or per task with `--worktrees`), changed files are compared against the plan's declared `files`.
 By default violations are warnings recorded in the run report; with `--strict-ownership` the offending task fails and its dependents are skipped — and in worktree mode its changes are not merged at all.
+The same git comparison catches the inverse fraud: a task that reports `completed` (or claims `changedFiles`) with zero git changes behind it is flagged as `phantom-completion` — warning by default, task failure under `--strict-ownership`.
+Worker-reported results are never trusted without git evidence.
 
 ### 4. Choose backend and model per run
 

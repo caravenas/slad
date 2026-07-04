@@ -9,6 +9,7 @@ import {
   buildHandoffPrompt,
   buildWorkerScript,
   computeOwnershipViolations,
+  isPhantomCompletion,
   parseWorkerOutput,
   renderStatusTable,
   runParallel,
@@ -191,6 +192,40 @@ describe("renderStatusTable", () => {
   });
 });
 
+describe("isPhantomCompletion", () => {
+  function output(status: RunOutput["status"], changedFiles: string[] = []): RunOutput {
+    return {
+      taskId: "T1",
+      status,
+      summary: "",
+      changedFiles,
+      decisions: [],
+      questions: [],
+      humanAnswers: {},
+      followUps: [],
+      verification: [],
+      reviewerNotes: [],
+    };
+  }
+
+  it("detecta completed con archivos declarados y cero cambios en git", () => {
+    assert.equal(isPhantomCompletion(task("T1", ["src/a.ts"]), output("completed"), []), true);
+  });
+
+  it("detecta changedFiles reclamados que git no respalda", () => {
+    assert.equal(isPhantomCompletion(task("T1", []), output("completed", ["src/a.ts"]), ["otro.ts"]), true);
+  });
+
+  it("no marca cuando git respalda al menos un archivo esperado", () => {
+    assert.equal(isPhantomCompletion(task("T1", ["src/a.ts"]), output("completed"), ["src/a.ts"]), false);
+  });
+
+  it("no marca tareas fallidas ni tareas sin archivos esperados", () => {
+    assert.equal(isPhantomCompletion(task("T1", ["src/a.ts"]), output("failed"), []), false);
+    assert.equal(isPhantomCompletion(task("T1", []), output("completed"), []), false);
+  });
+});
+
 describe("runParallel", () => {
   function tmpCwd(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), "slad-parallel-"));
@@ -263,6 +298,43 @@ describe("runParallel", () => {
     assert.equal(result.status, "failed");
     assert.equal(result.outputs[0]!.status, "failed");
     assert.ok(result.outputs[0]!.reviewerNotes.some((n) => n.includes("rogue.ts")));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("marca phantom-completion cuando el worker reporta éxito sin cambios en git", async () => {
+    const cwd = tmpCwd();
+    const result = await runParallel({
+      plan: plan([task("T1", ["a.ts"])]),
+      sessionId: "s1",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: false,
+      print: () => undefined,
+      listChangedFiles: async () => new Set(),
+      runWorker: async ({ task: t }) => ({ exitCode: 0, stdout: workerJson(t.id) }),
+    });
+
+    assert.equal(result.outputs[0]!.status, "completed");
+    assert.ok(result.outputs[0]!.reviewerNotes.some((n) => n.includes("phantom-completion")));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("con strict ownership la phantom-completion falla la tarea", async () => {
+    const cwd = tmpCwd();
+    const result = await runParallel({
+      plan: plan([task("T1", ["a.ts"])]),
+      sessionId: "s1",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: true,
+      print: () => undefined,
+      listChangedFiles: async () => new Set(),
+      runWorker: async ({ task: t }) => ({ exitCode: 0, stdout: workerJson(t.id) }),
+    });
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.outputs[0]!.status, "failed");
+    assert.ok(result.outputs[0]!.reviewerNotes.some((n) => n.includes("phantom-completion")));
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 

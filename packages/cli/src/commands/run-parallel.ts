@@ -164,6 +164,26 @@ export function computeOwnershipViolations(
     .sort();
 }
 
+/**
+ * A "phantom completion": the worker reported completed and claims or owns
+ * files, but none of them shows any git change. Seen with agy writing to its
+ * own scratch workspace while reporting successful writes to the repo —
+ * agent-reported changedFiles are never trusted without git evidence.
+ */
+export function isPhantomCompletion(
+  task: PlanTask,
+  output: RunOutput,
+  gitChanges: Iterable<string>,
+): boolean {
+  if (output.status !== "completed") return false;
+  const expected = new Set([...task.files, ...output.changedFiles]);
+  if (expected.size === 0) return false;
+  for (const file of gitChanges) {
+    if (expected.has(file)) return false;
+  }
+  return true;
+}
+
 async function gitChangedFiles(cwd: string): Promise<Set<string>> {
   try {
     const { stdout } = await exec("git", ["status", "--porcelain"], { cwd });
@@ -333,6 +353,16 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
   const runWorker = options.runWorker ?? defaultRunWorker;
   const listChangedFiles = options.listChangedFiles ?? (() => gitChangedFiles(cwd));
 
+  const flagPhantomCompletion = (task: PlanTask, output: RunOutput): void => {
+    const note = `phantom-completion: ${task.id} reportó completed pero git no muestra cambios en sus archivos`;
+    print(kleur.yellow(`⚠ ${note}`));
+    output.reviewerNotes.push(note);
+    if (strictOwnership) {
+      output.status = "failed";
+      output.summary += " [failed by --strict-ownership]";
+    }
+  };
+
   let integration: IntegrationSetup | null = null;
   if (useWorktrees) {
     await assertWorktreeReady(cwd);
@@ -384,6 +414,9 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
       for (const [index, task] of wave.entries()) {
         const output = waveOutputs[index]!;
         const commit = await commitTaskWork(specs[index]!.workspace, task.id, task.title);
+        if (isPhantomCompletion(task, output, commit.changedFiles)) {
+          flagPhantomCompletion(task, output);
+        }
         if (output.changedFiles.length === 0) output.changedFiles = commit.changedFiles;
 
         const violations = taskOwnershipViolations(commit.changedFiles, task);
@@ -408,6 +441,10 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
       }
     } else {
       const afterWave = await listChangedFiles();
+      for (const [index, task] of wave.entries()) {
+        const output = waveOutputs[index]!;
+        if (isPhantomCompletion(task, output, afterWave)) flagPhantomCompletion(task, output);
+      }
       const violations = computeOwnershipViolations(beforeWave!, afterWave, new Set(wave.flatMap((task) => task.files)));
       if (violations.length > 0) {
         const note = `ownership-violation: wave ${waveNumber} touched undeclared files: ${violations.join(", ")}`;
