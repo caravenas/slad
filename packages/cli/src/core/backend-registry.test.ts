@@ -61,10 +61,10 @@ describe("backend-registry", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("modela Codex, Claude Code y Pi como backends CLI soportados", () => {
+  it("modela Codex, Claude Code, Pi y Agy como backends CLI soportados", () => {
     const backends = Object.fromEntries(listSupportedBackends().map((backend) => [backend.id, backend]));
 
-    assert.deepEqual(Object.keys(backends).sort(), ["claude", "codex", "pi"]);
+    assert.deepEqual(Object.keys(backends).sort(), ["agy", "claude", "codex", "pi"]);
     assert.deepEqual(backends.codex, {
       id: "codex",
       label: "Codex",
@@ -102,9 +102,19 @@ describe("backend-registry", () => {
       modelArg: "--model",
       modelQueryCommands: [["--list-models"]],
     });
+    assert.deepEqual(backends.agy, {
+      id: "agy",
+      label: "Agy",
+      defaultBinary: "agy",
+      defaultArgs: ["--print"],
+      promptMode: "arg",
+      modelArg: "--model",
+      modelQueryCommands: [["models"]],
+    });
     assert.equal(getCliBackend("codex").defaultBinary, "codex");
     assert.equal(getCliBackend("claude").defaultBinary, "claude");
     assert.equal(getCliBackend("pi").defaultBinary, "pi");
+    assert.equal(getCliBackend("agy").defaultBinary, "agy");
   });
 
   it("parsea modelos desde respuestas JSON y texto plano", () => {
@@ -115,6 +125,18 @@ describe("backend-registry", () => {
     assert.deepEqual(
       parseModelList("Available models:\n- sonnet\n- opus  latest\n").map((m) => m.id),
       ["opus", "sonnet"],
+    );
+  });
+
+  it("parsea listas de nombres con espacios simples como las de agy models", () => {
+    const list = [
+      "Gemini 3.5 Flash (Medium)",
+      "Gemini 3.1 Pro (High)",
+      "Claude Sonnet 4.6 (Thinking)",
+    ].join("\n");
+    assert.deepEqual(
+      parseModelList(list).map((m) => m.id),
+      ["Claude Sonnet 4.6 (Thinking)", "Gemini 3.1 Pro (High)", "Gemini 3.5 Flash (Medium)"],
     );
   });
 

@@ -3,7 +3,7 @@
 **S**elf-**L**earning **A**utonomous **D**eveloper — an orchestrator for local coding-agent CLIs.
 
 SLAD does not call model APIs and needs no API keys.
-It drives the agent CLIs you already have installed — `claude`, `codex`, `pi` — through a structured engineering loop:
+It drives the agent CLIs you already have installed — `claude`, `codex`, `pi`, `agy` — through a structured engineering loop:
 
 ```
 explore → snapshot → plan → run → learn → evolve
@@ -25,7 +25,7 @@ SLAD adds what a solo agent session lacks:
 
 - Node 22+ and Corepack-enabled pnpm.
 - git (required for ownership checks and `--worktrees`).
-- At least one agent CLI on your PATH: `claude`, `codex`, or `pi`.
+- At least one agent CLI on your PATH: `claude`, `codex`, `pi`, or `agy`.
 - tmux (optional — workers get their own windows when you run inside tmux; plain child processes otherwise).
 
 ## Install
@@ -36,7 +36,7 @@ corepack pnpm build
 cd packages/cli && npm link   # exposes the `slad` binary globally
 ```
 
-Zero configuration is needed to start: SLAD auto-detects the first available backend (`claude` → `pi` → `codex`).
+Zero configuration is needed to start: SLAD auto-detects the first available backend (`claude` → `pi` → `codex` → `agy`).
 To pick defaults explicitly, run `slad model`, or pass `--agent` / `-m` per run.
 
 ## Quick start
@@ -98,6 +98,7 @@ By default violations are warnings recorded in the run report; with `--strict-ow
 ```bash
 slad pipeline run --parallel --agent claude -m sonnet
 slad pipeline run --parallel --agent pi -m openai-codex/gpt-5.5
+slad pipeline run --parallel --agent agy -m "Gemini 3.5 Flash (High)"
 slad pipeline auto "..." --agent codex
 ```
 
@@ -157,7 +158,7 @@ Key flags for `run --parallel`:
 --worktrees           per-task git worktrees + sequential merge + final squash
 --keep-worktrees      keep session worktrees/branches for debugging
 --strict-ownership    fail tasks that touch undeclared files
---agent <name>        backend: claude | codex | pi
+--agent <name>        backend: claude | codex | pi | agy
 -m, --model <id>      model passed to the backend
 ```
 

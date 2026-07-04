@@ -7,6 +7,7 @@ import path from "node:path";
 import type { PlanOutput, PlanTask, RunOutput } from "../core/types.js";
 import {
   buildHandoffPrompt,
+  buildWorkerScript,
   computeOwnershipViolations,
   parseWorkerOutput,
   renderStatusTable,
@@ -67,6 +68,56 @@ describe("buildHandoffPrompt", () => {
   it("omite la sección de memoria cuando no hay entrada", () => {
     const prompt = buildHandoffPrompt(task("T1", ["src/a.ts"]), plan([task("T1", ["src/a.ts"])]), null);
     assert.ok(!prompt.includes("Memoria global del proyecto"));
+  });
+});
+
+describe("buildWorkerScript", () => {
+  const ENV_KEYS = ["SLAD_CLI_BINARY", "SLAD_CLI_ARGS", "SLAD_CLI_PROMPT_MODE", "CLI_MODEL", "SLAD_CLI_MODEL_ARG"];
+
+  function withEnv(env: Record<string, string>, fn: () => void): void {
+    const previous = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
+    for (const key of ENV_KEYS) delete process.env[key];
+    Object.assign(process.env, env);
+    try {
+      fn();
+    } finally {
+      for (const [key, value] of previous) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  }
+
+  it("en modo arg pone el modelo antes de los args base para que el prompt siga al flag de print", () => {
+    withEnv(
+      {
+        SLAD_CLI_BINARY: "agy",
+        SLAD_CLI_ARGS: "--print",
+        SLAD_CLI_PROMPT_MODE: "arg",
+        CLI_MODEL: "Gemini 3.5 Flash (Low)",
+        SLAD_CLI_MODEL_ARG: "--model",
+      },
+      () => {
+        const script = buildWorkerScript("/ws", "/worker");
+        assert.ok(script.includes(`'--model' 'Gemini 3.5 Flash (Low)' '--print' "$(cat`));
+      },
+    );
+  });
+
+  it("en modo stdin mantiene el modelo después de los args base", () => {
+    withEnv(
+      {
+        SLAD_CLI_BINARY: "codex",
+        SLAD_CLI_ARGS: "exec --sandbox workspace-write",
+        SLAD_CLI_PROMPT_MODE: "stdin",
+        CLI_MODEL: "gpt-5-codex",
+        SLAD_CLI_MODEL_ARG: "--model",
+      },
+      () => {
+        const script = buildWorkerScript("/ws", "/worker");
+        assert.ok(script.includes("'exec' '--sandbox' 'workspace-write' '--model' 'gpt-5-codex' <"));
+      },
+    );
   });
 });
 

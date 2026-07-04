@@ -88,13 +88,16 @@ export class CliProvider implements ModelProvider {
         const args = [...this.extraArgs, ...modelArgs];
         return runCli(this.binary, args, prompt);
       }
+      // In arg mode the prompt must directly follow the backend's default
+      // args: flags like agy's --print consume the next token as the prompt,
+      // so model flags go first ([--model, X, --print, prompt]).
       case "arg": {
-        const args = [...this.extraArgs, ...modelArgs, prompt];
+        const args = [...modelArgs, ...this.extraArgs, prompt];
         return runCli(this.binary, args);
       }
       default: {
         // Fallback: pass prompt as last argument
-        const args = [...this.extraArgs, ...modelArgs, prompt];
+        const args = [...modelArgs, ...this.extraArgs, prompt];
         return runCli(this.binary, args);
       }
     }

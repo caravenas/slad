@@ -9,7 +9,7 @@ import { DiscoveryResult, type DiscoveryResult as DiscoveryResultType } from "./
 
 const exec = promisify(execFile);
 
-export const CliBackendId = z.enum(["codex", "claude", "pi"]);
+export const CliBackendId = z.enum(["codex", "claude", "pi", "agy"]);
 export type CliBackendId = z.infer<typeof CliBackendId>;
 
 export const CliBackendSelection = z.object({
@@ -100,6 +100,17 @@ const BACKENDS: Record<CliBackendId, CliBackendDefinition> = {
     promptMode: "arg",
     modelArg: "--model",
     modelQueryCommands: [["--list-models"]],
+  },
+  agy: {
+    id: "agy",
+    label: "Agy",
+    defaultBinary: "agy",
+    defaultArgs: ["--print"],
+    promptMode: "arg",
+    modelArg: "--model",
+    // `agy models` prints one display name per line ("Gemini 3.5 Flash (Low)");
+    // those full names are what --model accepts.
+    modelQueryCommands: [["models"]],
   },
 };
 
@@ -307,7 +318,7 @@ export function resolveBackendBinary(provider: CliBackendId | string, binary?: s
 }
 
 export async function discoverBackendBinaries(
-  providers: CliBackendId[] = ["codex", "claude", "pi"],
+  providers: CliBackendId[] = ["codex", "claude", "pi", "agy"],
 ): Promise<DiscoveryResultType> {
   const candidates = [];
 

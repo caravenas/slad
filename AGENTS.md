@@ -2,7 +2,7 @@
 
 ## Focus
 
-SLAD is an orchestrator of local coding-agent CLIs (`claude`, `codex`, `pi`) — not a general LLM framework.
+SLAD is an orchestrator of local coding-agent CLIs (`claude`, `codex`, `pi`, `agy`) — not a general LLM framework.
 It drives the loop `explore → snapshot → plan → run → learn → evolve`, and its differentiating feature is parallel plan execution: one agent-CLI worker per task in tmux windows, optionally isolated in per-task git worktrees (`--worktrees`) whose results merge back as staged, uncommitted changes.
 There are no HTTP model adapters and no API-key handling: `CliProvider` (in `@slad/model-providers`) spawns the configured agent binary, and `ProviderName` is just `["cli"]`.
 Do not reintroduce API providers, key plumbing, or vendor SDKs.
@@ -20,7 +20,7 @@ Removed — do not reference: the `@slad/ui` Next.js dashboard; the `@slad/agent
 
 Key CLI internals:
 
-- `packages/cli/src/core/backend-registry.ts`: supported agent backends (codex, claude, pi) — binaries, args, prompt modes, model listing. New backends go here; verify a binary's non-interactive flags against the real binary before wiring them.
+- `packages/cli/src/core/backend-registry.ts`: supported agent backends (codex, claude, pi, agy) — binaries, args, prompt modes, model listing. New backends go here; verify a binary's non-interactive flags against the real binary before wiring them.
 - `packages/cli/src/commands/run-parallel.ts` + `dag.ts` + `worktrees.ts`: wave scheduler (pairwise-disjoint `PlanTask.files`), worker spawning (tmux window or child process, sentinel files), git worktree lifecycle.
 - `packages/cli/src/persistence/global-memory.ts`: best-effort bridge to `~/.agents` in both directions — exports learn/evolve results to `~/.agents/{learnings,decisions}` via the global scripts, and `readProjectMemory()` reads `~/.agents/memory/projects/<repo>.md` for injection into parallel handoff prompts (disable both with `SLAD_GLOBAL_MEMORY=off`).
 
@@ -30,6 +30,7 @@ Key CLI internals:
 - Keep CLI-only runtime callbacks, local discovery, project inventory, and project config schemas in `packages/cli/src/core/types.ts`.
 - Typecheck resolves dependency types from source: every package's `exports` maps `types` to `./src/index.ts`. Never reintroduce TypeScript project references or `composite`; `pnpm typecheck` must pass with zero `dist/` present.
 - Model ids for CLI backends are backend-specific; with pi, prefer provider-qualified ids (`openai-codex/gpt-5.5`) because bare names fuzzy-match across providers.
+- agy models are display names with spaces (`Gemini 3.5 Flash (Low)`), so quote them; agy exits 0 even for unknown model names (silent fallback to its default).
 - Run verification from the root with `corepack pnpm build`, `corepack pnpm typecheck`, and `corepack pnpm test`. CI runs the same three on every push/PR to master.
 
 ## Workflow patterns

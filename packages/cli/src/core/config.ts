@@ -134,7 +134,7 @@ export function resolveProvider(
   return "cli";
 }
 
-const BACKEND_AUTODETECT_ORDER: CliBackendId[] = ["claude", "pi", "codex"];
+const BACKEND_AUTODETECT_ORDER: CliBackendId[] = ["claude", "pi", "codex", "agy"];
 
 /**
  * Zero-config fallback: when no agent was chosen and no binary is configured,
@@ -156,7 +156,7 @@ function applyAgentEnv(agent: import("@slad/shared").AgentName, fallbackBinary?:
   const configuredAgentModel = settingsValue<string>(["providers", "agentModels", agent]);
   const configuredCliModel = settingsValue<string>(["providers", "models", "cli"]);
 
-  if (agent === "codex" || agent === "claude" || agent === "pi") {
+  if (agent === "codex" || agent === "claude" || agent === "pi" || agent === "agy") {
     const model = envValue("CLI_MODEL") ?? configuredAgentModel ?? configuredCliModel ?? (agent === "claude" ? "sonnet" : undefined);
     const envPatch = backendEnvPatch(CliBackendId.parse(agent), model, configuredBinary);
     Object.assign(process.env, envPatch);

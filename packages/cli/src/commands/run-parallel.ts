@@ -190,11 +190,14 @@ function shq(value: string): string {
 /** Builds the worker shell script from the SLAD_CLI_* env set by resolveProvider. */
 export function buildWorkerScript(workspace: string, workerDir: string): string {
   const binary = process.env.SLAD_CLI_BINARY?.trim() || "codex";
-  const args = (process.env.SLAD_CLI_ARGS ?? "").split(/\s+/).filter(Boolean);
+  const baseArgs = (process.env.SLAD_CLI_ARGS ?? "").split(/\s+/).filter(Boolean);
   const promptMode = process.env.SLAD_CLI_PROMPT_MODE?.trim() || "arg";
   const model = process.env.CLI_MODEL?.trim();
   const modelArg = process.env.SLAD_CLI_MODEL_ARG?.trim();
-  if (model && modelArg) args.push(modelArg, model);
+  const modelArgs = model && modelArg ? [modelArg, model] : [];
+  // arg mode: model flags first so the prompt directly follows flags like
+  // agy's --print, which consume the next token as the prompt value.
+  const args = promptMode === "stdin" ? [...baseArgs, ...modelArgs] : [...modelArgs, ...baseArgs];
 
   const promptPath = path.join(workerDir, "prompt.txt");
   const outputPath = path.join(workerDir, "output.txt");
