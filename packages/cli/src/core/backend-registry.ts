@@ -105,7 +105,12 @@ const BACKENDS: Record<CliBackendId, CliBackendDefinition> = {
     id: "agy",
     label: "Agy",
     defaultBinary: "agy",
-    defaultArgs: ["--print"],
+    // Without --add-dir, agy works in its own scratch workspace
+    // (~/.gemini/antigravity-cli/scratch) and reports cwd writes that never
+    // happened there. {workspace} is substituted with the absolute workspace
+    // at spawn time. Writes need --dangerously-skip-permissions in print mode;
+    // SLAD's ownership checks and worktrees are the containment.
+    defaultArgs: ["--dangerously-skip-permissions", "--add-dir", "{workspace}", "--print"],
     promptMode: "arg",
     modelArg: "--model",
     // `agy models` prints one display name per line ("Gemini 3.5 Flash (Low)");

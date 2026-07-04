@@ -77,6 +77,9 @@ export class CliProvider implements ModelProvider {
   async complete(messages: ChatMessage[], opts?: { systemPrompt?: string; model?: string }): Promise<string> {
     const prompt = formatMessages(messages, opts?.systemPrompt);
     const model = opts?.model ?? this.model;
+    // Backends like agy take the workspace as an absolute-path flag value
+    // ({workspace} in the registry's defaultArgs); resolve it at spawn time.
+    const extraArgs = this.extraArgs.map((arg) => (arg === "{workspace}" ? process.cwd() : arg));
 
     const modelArgs: string[] = [];
     if (model && envStr("SLAD_CLI_MODEL_ARG")) {
@@ -85,19 +88,19 @@ export class CliProvider implements ModelProvider {
 
     switch (this.promptMode) {
       case "stdin": {
-        const args = [...this.extraArgs, ...modelArgs];
+        const args = [...extraArgs, ...modelArgs];
         return runCli(this.binary, args, prompt);
       }
       // In arg mode the prompt must directly follow the backend's default
       // args: flags like agy's --print consume the next token as the prompt,
       // so model flags go first ([--model, X, --print, prompt]).
       case "arg": {
-        const args = [...modelArgs, ...this.extraArgs, prompt];
+        const args = [...modelArgs, ...extraArgs, prompt];
         return runCli(this.binary, args);
       }
       default: {
         // Fallback: pass prompt as last argument
-        const args = [...modelArgs, ...this.extraArgs, prompt];
+        const args = [...modelArgs, ...extraArgs, prompt];
         return runCli(this.binary, args);
       }
     }

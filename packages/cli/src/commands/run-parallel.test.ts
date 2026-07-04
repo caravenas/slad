@@ -104,6 +104,21 @@ describe("buildWorkerScript", () => {
     );
   });
 
+  it("sustituye {workspace} en los args por la ruta del workspace de la tarea", () => {
+    withEnv(
+      {
+        SLAD_CLI_BINARY: "agy",
+        SLAD_CLI_ARGS: "--dangerously-skip-permissions --add-dir {workspace} --print",
+        SLAD_CLI_PROMPT_MODE: "arg",
+      },
+      () => {
+        const script = buildWorkerScript("/tmp/task-worktree", "/worker");
+        assert.ok(script.includes("'--add-dir' '/tmp/task-worktree' '--print'"));
+        assert.ok(!script.includes("{workspace}"));
+      },
+    );
+  });
+
   it("en modo stdin mantiene el modelo después de los args base", () => {
     withEnv(
       {

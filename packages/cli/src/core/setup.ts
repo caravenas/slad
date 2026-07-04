@@ -92,7 +92,7 @@ export async function runSetupIfNeeded(): Promise<void> {
     process.env.SLAD_CLI_PROMPT_MODE = "arg";
     writeConfig({ providers: { defaultProvider: "cli", defaultAgent: "pi" } });
   } else if (basename === "agy") {
-    process.env.SLAD_CLI_ARGS = "--print";
+    process.env.SLAD_CLI_ARGS = "--dangerously-skip-permissions --add-dir {workspace} --print";
     process.env.SLAD_CLI_PROMPT_MODE = "arg";
     writeConfig({ providers: { defaultProvider: "cli", defaultAgent: "agy" } });
   } else {

@@ -190,7 +190,10 @@ function shq(value: string): string {
 /** Builds the worker shell script from the SLAD_CLI_* env set by resolveProvider. */
 export function buildWorkerScript(workspace: string, workerDir: string): string {
   const binary = process.env.SLAD_CLI_BINARY?.trim() || "codex";
-  const baseArgs = (process.env.SLAD_CLI_ARGS ?? "").split(/\s+/).filter(Boolean);
+  const baseArgs = (process.env.SLAD_CLI_ARGS ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((arg) => (arg === "{workspace}" ? workspace : arg));
   const promptMode = process.env.SLAD_CLI_PROMPT_MODE?.trim() || "arg";
   const model = process.env.CLI_MODEL?.trim();
   const modelArg = process.env.SLAD_CLI_MODEL_ARG?.trim();

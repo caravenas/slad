@@ -106,7 +106,7 @@ describe("backend-registry", () => {
       id: "agy",
       label: "Agy",
       defaultBinary: "agy",
-      defaultArgs: ["--print"],
+      defaultArgs: ["--dangerously-skip-permissions", "--add-dir", "{workspace}", "--print"],
       promptMode: "arg",
       modelArg: "--model",
       modelQueryCommands: [["models"]],

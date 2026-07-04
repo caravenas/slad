@@ -31,6 +31,7 @@ Key CLI internals:
 - Typecheck resolves dependency types from source: every package's `exports` maps `types` to `./src/index.ts`. Never reintroduce TypeScript project references or `composite`; `pnpm typecheck` must pass with zero `dist/` present.
 - Model ids for CLI backends are backend-specific; with pi, prefer provider-qualified ids (`openai-codex/gpt-5.5`) because bare names fuzzy-match across providers.
 - agy models are display names with spaces (`Gemini 3.5 Flash (Low)`), so quote them; agy exits 0 even for unknown model names (silent fallback to its default).
+- agy ignores the process cwd: without `--add-dir` it works in its own scratch (`~/.gemini/antigravity-cli/scratch/`) while claiming it wrote to the current directory, and writes need `--dangerously-skip-permissions` in print mode. The registry passes `--add-dir {workspace}`; `{workspace}` is substituted with the absolute workspace path at spawn time (CliProvider and buildWorkerScript).
 - Run verification from the root with `corepack pnpm build`, `corepack pnpm typecheck`, and `corepack pnpm test`. CI runs the same three on every push/PR to master.
 
 ## Workflow patterns
