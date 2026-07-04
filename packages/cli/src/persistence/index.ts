@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { stripEmptyCollections } from "@slad/shared";
 import {
   EvolveOutput,
   ExploreOutput,
@@ -92,7 +93,8 @@ export async function writeArtifact<K extends ArtifactKind>(
     sessionId: ctx.sessionId,
     createdAt,
     ...(taskId ? { taskId } : {}),
-    value,
+    // Empty collections are dropped on write; the Zod defaults restore them on read.
+    value: stripEmptyCollections(value),
   };
   const content = JSON.stringify(envelope, null, 2);
 

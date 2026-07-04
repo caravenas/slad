@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ExploreOutput, SnapshotOutput, type ChatMessage } from "@slad/shared";
+import { ExploreOutput, SnapshotOutput, toCompactJson, type ChatMessage } from "@slad/shared";
 import { defineStage } from "../stage.js";
 import type { SladServices } from "./types.js";
 
@@ -60,7 +60,7 @@ export const snapshotStage = defineStage<ExploreOutput, SnapshotOutput, SladServ
       const lines = Object.entries(answers).map(([id, value]) => `- ${id}: ${value}`);
       const answerContent = `Respuestas del humano:\n${lines.join("\n")}\n\nContinuá la tarea con esta información. Respondé ÚNICAMENTE con el JSON de output según el schema esperado, sin texto adicional.`;
 
-      messages.push({ role: "assistant", content: JSON.stringify(output) });
+      messages.push({ role: "assistant", content: toCompactJson(output) });
       messages.push({ role: "user", content: answerContent });
       rounds++;
     }

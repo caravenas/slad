@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { stripEmptyCollections } from "@slad/shared";
 import { writeArtifact, readArtifact } from "./index.js";
 import { ParseError } from "../core/errors.js";
 import { resetDocsRootCache } from "./layout.js";
@@ -81,14 +82,14 @@ describe("persistence/run", () => {
     assert.ok(ref.path.endsWith(".json"), `Expected .json path, got: ${ref.path}`);
   });
 
-  it("4. envelope tiene kind, schemaVersion, sessionId, value", async () => {
+  it("4. envelope tiene kind, schemaVersion, sessionId, value (sin colecciones vacías)", async () => {
     const original = makeRunOutput();
     const ref = await writeArtifact("run", original, BASE_CTX);
     const raw = JSON.parse(fs.readFileSync(ref.path, "utf8")) as Record<string, unknown>;
     assert.equal(raw.kind, "run");
     assert.equal(raw.schemaVersion, 1);
     assert.equal(raw.sessionId, BASE_CTX.sessionId);
-    assert.deepEqual(raw.value, original);
+    assert.deepEqual(raw.value, stripEmptyCollections(original));
   });
 
   it("5. readArtifact falla con ParseError phase=filesystem si el archivo no existe", async () => {

@@ -4,6 +4,7 @@ import ora from "ora";
 import kleur from "kleur";
 import { getModel, loadConfig, resolveProvider, withPromptGuidance } from "../core/config.js";
 import { PlanOutput, type ChatMessage } from "../core/types.js";
+import { toCompactJson } from "@slad/shared";
 import { getSladProvider } from "../core/providers.js";
 import { PLANNER_SYSTEM } from "../agents/prompts.js";
 import {
@@ -254,7 +255,7 @@ export async function planCommand(opts: PlanOpts): Promise<void> {
           sessionContext: sessionCtx,
         });
         output = result.value;
-        raw = JSON.stringify(output);
+        raw = toCompactJson(output);
         messages.push({ role: "user", content: result.userContent });
       } else {
         raw = await provider.complete(messages, {

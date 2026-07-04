@@ -18,6 +18,7 @@ import { getOrCreateSession, appendArtifact, saveSession, sessionContextBlock, l
 import { writeArtifact, readArtifact } from "../persistence/index.js";
 import { readWikiContextCached } from "../agents/explorer.js";
 import { hashStructured, hashText, readOrCreateReusableValue } from "@slad/cache";
+import { toCompactJson } from "@slad/shared";
 import { projectContextBlock } from "../core/context.js";
 
 export interface ExploreOpts {
@@ -109,7 +110,10 @@ export async function generateExploreOutput(options: {
           onUsage: options.onUsage,
         },
       );
-      return parseExploreOutput(raw);
+      const parsed = parseExploreOutput(raw);
+      // El prompt ya no pide que el modelo repita la intención; se completa acá.
+      if (!parsed.intent) parsed.intent = options.intent;
+      return parsed;
     },
     isCacheable: (output) => output.status === "completed",
   });
@@ -167,7 +171,7 @@ export async function exploreCommand(intent: string, opts: ExploreOpts): Promise
         const answersMap: Record<string, string> = {};
         for (const a of exploreAnswers) answersMap[a.questionId] = a.answer;
         output = prevOutput;
-        raw = JSON.stringify(prevOutput);
+        raw = toCompactJson(prevOutput);
         messages.push({ role: "user", content: originalUserContent });
         messages.push({ role: "assistant", content: raw });
         messages.push({ role: "user", content: formatAnswersForPrompt(answersMap) });
@@ -190,7 +194,7 @@ export async function exploreCommand(intent: string, opts: ExploreOpts): Promise
           sessionContext: sessionCtx,
         });
         output = result.value;
-        raw = JSON.stringify(output);
+        raw = toCompactJson(output);
         messages.push({
           role: "user",
           content: result.userContent,
@@ -203,6 +207,7 @@ export async function exploreCommand(intent: string, opts: ExploreOpts): Promise
           model,
         });
         output = parseExploreOutput(raw);
+        if (!output.intent) output.intent = intent;
       }
     } catch (err) {
       spinner.fail("Falló la exploración");

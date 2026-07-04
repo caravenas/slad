@@ -4,6 +4,7 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import kleur from "kleur";
 import { RunOutput, type PlanOutput, type PlanTask } from "../core/types.js";
+import { toCompactJson } from "@slad/shared";
 import { BUILDER_REVIEWER_SYSTEM } from "../agents/prompts.js";
 import { getNextWave, autoSkipDependents, type TaskStatus } from "./dag.js";
 import {
@@ -94,9 +95,9 @@ export function buildHandoffPrompt(
       ? [`Memoria global del proyecto (~/.agents/memory/projects/):\n${projectMemory}`]
       : []),
     `Plan summary:\n${plan.summary}`,
-    `Selected task:\n${JSON.stringify(task, null, 2)}`,
+    `Selected task:\n${toCompactJson(task)}`,
     `Al terminar, imprime como ÚLTIMO bloque de tu salida un objeto JSON válido con esta forma exacta (schema RunOutput):\n` +
-      `{"taskId": "${task.id}", "status": "completed" | "blocked" | "failed", "summary": string, "changedFiles": string[], "verification": [{"command": string, "status": "passed" | "failed" | "not_run", "notes": string}], "decisions": [], "questions": [], "humanAnswers": {}, "followUps": string[], "reviewerNotes": string[]}`,
+      `{"taskId": "${task.id}", "status": "completed" | "blocked" | "failed", "summary": string, "changedFiles": string[], "verification": [{"command": string, "status": "passed" | "failed" | "not_run", "notes": string}], "followUps": string[], "reviewerNotes": string[]}`,
   ].join("\n\n");
 }
 

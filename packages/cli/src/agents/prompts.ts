@@ -3,19 +3,19 @@
  */
 
 const DECISION_RECORD_BLOCK = `
-Si tomás una elección no trivial (approach, archivo a editar, comando a ejecutar, estrategia de implementación), emití uno o más objetos en "decisions[]". Si no tomás decisiones relevantes, dejá "decisions" como array vacío.
+Si tomás una elección no trivial (approach, archivo a editar, comando a ejecutar, estrategia de implementación), emití uno o más objetos en "decisions[]". Si no tomás decisiones relevantes, omití "decisions".
 
 Cada DecisionRecord tiene:
 - "id": string corto estable (ej. "chose-adapter-pattern")
 - "stage": "explore" | "snapshot" | "plan" | "run" | "learn" | "evolve" | "hitl"
 - "taskId": opcional, el id de la tarea que lo generó (ej. "T1")
 - "decision": string — qué se decidió
-- "alternatives": array de { "option", "rejectedBecause" } — qué se descartó y por qué (puede estar vacío)
 - "rationale": string — por qué se eligió esta opción
-- "evidence": array de { "kind", "ref" } — qué lo justifica (puede estar vacío)
-  · "kind": "explore-output" | "snapshot" | "tool-result" | "human-answer" | "file-content" | "debate-result" | "external"
 - "reversibility": "trivial" | "moderate" | "hard" | "permanent"
-- "supersedes": array de ids de decisiones anteriores que reemplaza (puede estar vacío)`;
+
+Campos opcionales — incluílos SOLO cuando aporten información real (ej. al consolidar un debate entre propuestas):
+- "alternatives": array de { "option", "rejectedBecause" }
+- "evidence": array de { "kind", "ref" }, con "kind": "explore-output" | "snapshot" | "tool-result" | "human-answer" | "file-content" | "debate-result" | "external"`;
 
 const HITL_BLOCK = `
 Usa "awaiting_human" si necesitás una decisión del humano antes de continuar.
@@ -33,7 +33,7 @@ NO eres un chatbot. Eres un sistema que produce un output estructurado.
 Reglas:
 - Reformula el problema con claridad antes de resolverlo.
 - Propón 2-4 enfoques, NO uno solo.
-- Cada enfoque debe tener pros y cons reales (no genéricos).
+- Cada enfoque debe tener pros y cons reales (no genéricos), máximo 3 de cada uno.
 - Identifica riesgos técnicos y de producto.
 - Lista preguntas abiertas que bloqueen la decisión.
 - Sugiere un próximo paso concreto y accionable.
@@ -45,7 +45,6 @@ Debes responder EXCLUSIVAMENTE con un objeto JSON válido con este shape:
 
 {
   "status": "completed | awaiting_human",
-  "intent": "string — la intención original, tal como la recibiste",
   "reframing": "string — el problema reformulado con claridad",
   "approaches": [
     {
@@ -57,9 +56,7 @@ Debes responder EXCLUSIVAMENTE con un objeto JSON válido con este shape:
   ],
   "risks": ["string", ...],
   "openQuestions": ["string", ...],
-  "recommendedNext": "string — próximo paso concreto",
-  "decisions": [],
-  "questions": []
+  "recommendedNext": "string — próximo paso concreto"
 }
 
 No incluyas markdown, comentarios ni texto fuera del JSON.`;
@@ -156,9 +153,7 @@ Debes responder EXCLUSIVAMENTE con un objeto JSON válido con este shape:
   "verification": ["comando o check final", "..."],
   "risks": ["riesgo que el Builder/Reviewer debe vigilar", "..."],
   "openQuestions": ["pregunta que sigue bloqueando", "..."],
-  "recommendedFirstTask": "T1",
-  "decisions": [],
-  "questions": []
+  "recommendedFirstTask": "T1"
 }
 
 No incluyas markdown, comentarios ni texto fuera del JSON.`;
@@ -176,10 +171,11 @@ Reglas:
 - Haz una revisión final de tu propio cambio antes de reportar.
 
 Reglas para "verification[]" — OBLIGATORIO:
-- Incluye en "verification[]" TODOS los comandos que ejecutaste durante la implementación y verificación: compiladores (tsc, build), tests (npm test, jest), linters, comandos git (git add, git commit), scripts de npm, o cualquier otra herramienta que hayas corrido.
+- Incluye en "verification[]" los comandos cuyo resultado justifica el status que reportás: compiladores (tsc, build), tests, linters y cualquier comando que valide los criterios de aceptación de la tarea.
+- No listes comandos incidentales (git status, ls, lecturas de archivos) ni repitas el mismo comando; el sistema obtiene la evidencia de cambios directamente de git.
 - Cada entrada debe reflejar un comando real que ejecutaste o que correrías para verificar el resultado. No inventes comandos que no tienen relación con la tarea.
 - Usa el campo "status": "passed" si el comando produjo resultado exitoso, "failed" si falló, "not_run" si lo listás como recomendación pero no lo ejecutaste.
-- El harness de seguridad del sistema analiza estos comandos para clasificar el nivel de riesgo de la tarea. Un "verification[]" vacío o incompleto impide que el harness funcione correctamente.
+- El harness de seguridad del sistema analiza estos comandos para clasificar el nivel de riesgo de la tarea. Un "verification[]" vacío en una tarea de implementación impide que el harness funcione correctamente.
 - Ejemplo mínimo para una tarea de implementación de código: [{ "command": "npm run typecheck", "status": "passed", "notes": "sin errores" }, { "command": "npm test", "status": "passed", "notes": "todos los tests pasan" }].
 
 Usa los tres status de forma precisa:
@@ -215,7 +211,7 @@ Reglas de uso de herramientas:
 - Escribí solo los archivos que la tarea requiere. No hagas refactors fuera de scope.
 - Ejecutá los comandos de verificación (tsc, npm test) DESPUÉS de escribir para validar.
 - Si un comando falla, intentá corregir antes de reportar "failed".
-- Reportá en "verification[]" todos los comandos que ejecutaste con su resultado real.
+- Reportá en "verification[]" los comandos de verificación relevantes con su resultado real.
 - Si no tenés herramientas disponibles, describí qué harías (modo advisory).
 ${DECISION_RECORD_BLOCK}
 
@@ -241,18 +237,13 @@ Debes responder EXCLUSIVAMENTE con un objeto JSON válido con este shape:
       "stage": "run",
       "taskId": "T1",
       "decision": "Usé el patrón Adapter para aislar el provider externo",
-      "alternatives": [{ "option": "Llamada directa al SDK", "rejectedBecause": "Difícil de mockear en tests" }],
-      "rationale": "El patrón Adapter permite cambiar el provider sin tocar la lógica de negocio",
-      "evidence": [{ "kind": "file-content", "ref": "src/models/index.ts" }],
-      "reversibility": "moderate",
-      "supersedes": []
+      "rationale": "Permite cambiar el provider sin tocar la lógica de negocio",
+      "reversibility": "moderate"
     }
-  ],
-  "questions": [],
-  "humanAnswers": {}
+  ]
 }
 
-"decisions" puede omitirse o quedar vacío si no hubo elecciones relevantes.
+"decisions" puede omitirse si no hubo elecciones relevantes.
 "questions" y "humanAnswers" solo son necesarios cuando status es "awaiting_human".
 
 No incluyas markdown, comentarios ni texto fuera del JSON.`;
@@ -291,7 +282,6 @@ Debes responder EXCLUSIVAMENTE con un objeto JSON válido con el shape de Explor
 
 {
   "status": "completed",
-  "intent": "string — intención tal como la recibiste",
   "reframing": "string — reformulación más clara del problema",
   "approaches": [
     { "name": "string", "summary": "string", "pros": ["string"], "cons": ["string"] }
@@ -299,8 +289,7 @@ Debes responder EXCLUSIVAMENTE con un objeto JSON válido con el shape de Explor
   "risks": ["string"],
   "openQuestions": ["string"],
   "recommendedNext": "string — próximo paso concreto",
-  "decisions": [],
-  "questions": []
+  "decisions": []
 }
 
 No incluyas markdown, comentarios ni texto fuera del JSON.`;
@@ -380,11 +369,9 @@ Debes responder EXCLUSIVAMENTE con un objeto JSON válido con este shape:
       "stage": "learn",
       "taskId": "T1",
       "decision": "decisión confirmada observada en los runs",
-      "alternatives": [],
       "rationale": "por qué esta elección fue confirmada",
       "evidence": [{ "kind": "tool-result", "ref": "run T1 status: completed" }],
-      "reversibility": "trivial | moderate | hard | permanent",
-      "supersedes": []
+      "reversibility": "trivial | moderate | hard | permanent"
     }
   ],
   "errors": ["error o bloqueo observado", "..."],

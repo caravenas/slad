@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LearnOutput, RunOutput } from "@slad/shared";
+import { LearnOutput, RunOutput, toCompactJson } from "@slad/shared";
 import { defineStage } from "../stage.js";
 import type { SladServices } from "./types.js";
 
@@ -23,7 +23,7 @@ export const learnStage = defineStage<LearnInput, LearnOutput, SladServices>({
     const output = await ctx.model.generateObject({
       schema: LearnOutput as z.ZodType<LearnOutput>,
       system,
-      input: `Run results:\n${JSON.stringify(input, null, 2)}`,
+      input: `Run results:\n${toCompactJson(input)}`,
       temperature: 0.2,
       maxTokens: 1500,
     });

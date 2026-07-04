@@ -150,20 +150,21 @@ export type DecisionRecord = z.infer<typeof DecisionRecord>;
 
 export const ExploreOutput = z.object({
   status: z.enum(["completed", "awaiting_human"]).default("completed"),
-  intent: z.string(),
+  // Filled programmatically from the stage input; the model is not asked to echo it.
+  intent: z.string().default(""),
   reframing: z.string(),
   approaches: z
     .array(
       z.object({
         name: z.string(),
         summary: z.string(),
-        pros: z.array(z.string()),
-        cons: z.array(z.string()),
+        pros: z.array(z.string()).default([]),
+        cons: z.array(z.string()).default([]),
       }),
     )
     .min(1),
-  risks: z.array(z.string()),
-  openQuestions: z.array(z.string()),
+  risks: z.array(z.string()).default([]),
+  openQuestions: z.array(z.string()).default([]),
   recommendedNext: z.string(),
   questions: z.array(Question).default([]),
   decisions: z.array(DecisionRecord).default([]),
@@ -202,138 +203,6 @@ export const PlanOutput = z.object({
   decisions: z.array(DecisionRecord).default([]),
 });
 export type PlanOutput = z.infer<typeof PlanOutput>;
-
-export const ResearchSourceId = z.string().min(1);
-export type ResearchSourceId = z.infer<typeof ResearchSourceId>;
-
-export const ResearchSourceRange = z.object({
-  startLine: z.number().int().positive(),
-  endLine: z.number().int().positive().optional(),
-}).superRefine((range, ctx) => {
-  if (range.endLine !== undefined && range.endLine < range.startLine) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "endLine must be greater than or equal to startLine",
-      path: ["endLine"],
-    });
-  }
-});
-export type ResearchSourceRange = z.infer<typeof ResearchSourceRange>;
-
-export const ResearchRepoSource = z.object({
-  id: ResearchSourceId,
-  type: z.literal("repo"),
-  title: z.string().min(1).optional(),
-  path: z.string().min(1),
-  range: ResearchSourceRange.optional(),
-  symbol: z.string().min(1).optional(),
-});
-export type ResearchRepoSource = z.infer<typeof ResearchRepoSource>;
-
-export const ResearchWebSource = z.object({
-  id: ResearchSourceId,
-  type: z.literal("web"),
-  title: z.string().min(1).optional(),
-  url: z.string().url(),
-  accessedAt: z.string().datetime().optional(),
-});
-export type ResearchWebSource = z.infer<typeof ResearchWebSource>;
-
-export const ResearchSource = z.discriminatedUnion("type", [
-  ResearchRepoSource,
-  ResearchWebSource,
-]);
-export type ResearchSource = z.infer<typeof ResearchSource>;
-
-export const ResearchFinding = z.object({
-  id: z.string().min(1),
-  title: z.string().min(1),
-  summary: z.string().min(1),
-  citations: z.array(ResearchSourceId).min(1),
-  confidence: z.number().min(0).max(1).optional(),
-});
-export type ResearchFinding = z.infer<typeof ResearchFinding>;
-
-export const ResearchGap = z.object({
-  id: z.string().min(1),
-  description: z.string().min(1),
-  impact: z.string().min(1).optional(),
-  citations: z.array(ResearchSourceId).default([]),
-});
-export type ResearchGap = z.infer<typeof ResearchGap>;
-
-export const ResearchRecommendation = z.object({
-  id: z.string().min(1),
-  recommendation: z.string().min(1),
-  rationale: z.string().min(1).optional(),
-  citations: z.array(ResearchSourceId).default([]),
-});
-export type ResearchRecommendation = z.infer<typeof ResearchRecommendation>;
-
-export const ResearchReportArtifact = z.object({
-  kind: z.literal("research_report").default("research_report"),
-  path: z.string().min(1),
-  format: z.enum(["json", "markdown"]).default("json"),
-  title: z.string().min(1).optional(),
-});
-export type ResearchReportArtifact = z.infer<typeof ResearchReportArtifact>;
-
-export const ResearchOutputMetadata = z.object({
-  stage: z.literal("research").default("research"),
-  artifactKind: z.literal("research_report").default("research_report"),
-  sessionId: z.string().min(1).optional(),
-  taskId: TaskId.optional(),
-  createdAt: z.string().datetime().optional(),
-  persistedAt: z.string().datetime().optional(),
-});
-export type ResearchOutputMetadata = z.infer<typeof ResearchOutputMetadata>;
-
-export const ResearchOutput = z.object({
-  status: z.enum(["completed", "awaiting_human"]).default("completed"),
-  summary: z.string().min(1),
-  scope: z.object({
-    question: z.string().min(1),
-    constraints: z.array(z.string().min(1)).default([]),
-    repoPaths: z.array(z.string().min(1)).default([]),
-    webQueries: z.array(z.string().min(1)).default([]),
-  }),
-  findings: z.array(ResearchFinding).default([]),
-  gaps: z.array(ResearchGap).default([]),
-  recommendations: z.array(ResearchRecommendation).default([]),
-  sources: z.array(ResearchSource).default([]),
-  artifact: ResearchReportArtifact,
-  metadata: ResearchOutputMetadata.default({}),
-  questions: z.array(Question).default([]),
-  decisions: z.array(DecisionRecord).default([]),
-}).superRefine((output, ctx) => {
-  const sourceIds = new Set<ResearchSourceId>();
-
-  for (const [index, source] of output.sources.entries()) {
-    if (sourceIds.has(source.id)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `duplicate source id: ${source.id}`,
-        path: ["sources", index, "id"],
-      });
-      continue;
-    }
-
-    sourceIds.add(source.id);
-  }
-
-  for (const [index, finding] of output.findings.entries()) {
-    for (const [citationIndex, citation] of finding.citations.entries()) {
-      if (!sourceIds.has(citation)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `finding citation references unknown source id: ${citation}`,
-          path: ["findings", index, "citations", citationIndex],
-        });
-      }
-    }
-  }
-});
-export type ResearchOutput = z.infer<typeof ResearchOutput>;
 
 export const RoutingMode = z.enum(["ask", "work", "work-debate"]);
 export type RoutingMode = z.infer<typeof RoutingMode>;

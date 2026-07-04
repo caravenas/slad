@@ -1,4 +1,5 @@
 export * from "./constants.js";
+export * from "./json.js";
 export * from "./schemas.js";
 export {
   AGENT_CATALOG,

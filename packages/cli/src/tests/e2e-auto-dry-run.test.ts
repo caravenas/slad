@@ -499,8 +499,8 @@ describe("E2E: slad auto resume coverage", { concurrency: 1 }, () => {
         [["T1", "completed"], ["T2", "failed"], ["T2", "completed"]],
       );
       assert.equal(retryProvider.calls.length, 1, "retry should execute exactly one pending task");
-      assert.match(retryProvider.calls[0] ?? "", /"id": "T2"/);
-      assert.doesNotMatch(retryProvider.calls[0] ?? "", /"id": "T1"/);
+      assert.match(retryProvider.calls[0] ?? "", /"id":\s*"T2"/);
+      assert.doesNotMatch(retryProvider.calls[0] ?? "", /"id":\s*"T1"/);
     });
   });
 
