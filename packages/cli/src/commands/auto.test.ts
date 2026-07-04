@@ -14,6 +14,7 @@ import {
   completedRunTaskIds,
   formatAutoHitlBlockedMessage,
   isCompleteAutoStageOutput,
+  normalizeSpuriousAwaitingHuman,
   planPendingRunTasks,
   resolveAutoHitlQuestions,
 } from "./auto.js";
@@ -235,6 +236,32 @@ describe("auto helpers", () => {
 });
 
 // ─── PipelineStop (clase interna — testeada via comportamiento) ───────────────
+
+describe("normalizeSpuriousAwaitingHuman", () => {
+  const q = (blocking: boolean) => ({ id: "q1", prompt: "¿?", kind: "free", blocking });
+
+  it("convierte awaiting_human sin preguntas en completed", () => {
+    const out = normalizeSpuriousAwaitingHuman("explore", { status: "awaiting_human", questions: [] });
+    assert.equal((out as { status: string }).status, "completed");
+  });
+
+  it("convierte awaiting_human con solo preguntas no bloqueantes en completed", () => {
+    const out = normalizeSpuriousAwaitingHuman("explore", { status: "awaiting_human", questions: [q(false)] });
+    assert.equal((out as { status: string }).status, "completed");
+  });
+
+  it("no toca awaiting_human con preguntas bloqueantes", () => {
+    const input = { status: "awaiting_human", questions: [q(true)] };
+    assert.equal(normalizeSpuriousAwaitingHuman("plan", input), input);
+  });
+
+  it("no toca outputs del stage run ni outputs completed", () => {
+    const run = { status: "awaiting_human", questions: [] };
+    assert.equal(normalizeSpuriousAwaitingHuman("run", run), run);
+    const done = { status: "completed" };
+    assert.equal(normalizeSpuriousAwaitingHuman("explore", done), done);
+  });
+});
 
 describe("pipeline stop behavior", () => {
   it("dry-run con stages completos reporta 'completed'", () => {

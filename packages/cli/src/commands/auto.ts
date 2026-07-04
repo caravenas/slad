@@ -80,6 +80,19 @@ export type AutoHitlResolution = {
   unresolved: Question[];
 };
 
+/**
+ * Models sometimes emit status "awaiting_human" with no blocking questions —
+ * there is nothing for a human to answer, so failing the pipeline is wrong.
+ * Normalized to "completed" before persisting (seen with claude on explore).
+ * Run outputs are excluded: a blocked worker is a real failure signal.
+ */
+export function normalizeSpuriousAwaitingHuman(stage: SladPipelineStageId, output: unknown): unknown {
+  if (stage === "run" || !isRecord(output) || output.status !== "awaiting_human") return output;
+  const questions = Array.isArray(output.questions) ? output.questions.filter(isQuestion) : [];
+  if (questions.some((question) => question.blocking !== false)) return output;
+  return { ...output, status: "completed" };
+}
+
 export function isCompleteAutoStageOutput(stage: SladPipelineStageId, output: unknown): boolean {
   if (stage === "run") {
     const outputs = Array.isArray(output) ? output : [output];
@@ -500,6 +513,11 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
       },
       onArtifact: async (stage: string, artifact: unknown) => {
         const stageId = stage as SladPipelineStageId;
+        const normalized = normalizeSpuriousAwaitingHuman(stageId, artifact);
+        if (normalized !== artifact) {
+          process.stdout.write(kleur.yellow(`  ⚠ ${stageId}: awaiting_human sin preguntas bloqueantes — tratado como completed\n`));
+          artifact = normalized;
+        }
         if (stageId === "run") {
           const outputs = Array.isArray(artifact) ? (artifact as RunOutput[]) : [artifact as RunOutput];
           for (const output of outputs) {
