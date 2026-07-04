@@ -82,7 +82,10 @@ const BACKENDS: Record<CliBackendId, CliBackendDefinition> = {
     id: "claude",
     label: "Claude Code",
     defaultBinary: "claude",
-    defaultArgs: ["--print"],
+    // Non-interactive claude auto-denies Write/Bash permission prompts, so
+    // workers report blocked without --dangerously-skip-permissions. Same
+    // tradeoff as agy: ownership checks and worktrees are the containment.
+    defaultArgs: ["--print", "--dangerously-skip-permissions"],
     promptMode: "arg",
     modelArg: "--model",
     modelQueryCommands: [

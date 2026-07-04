@@ -83,7 +83,7 @@ describe("backend-registry", () => {
       id: "claude",
       label: "Claude Code",
       defaultBinary: "claude",
-      defaultArgs: ["--print"],
+      defaultArgs: ["--print", "--dangerously-skip-permissions"],
       promptMode: "arg",
       modelArg: "--model",
       modelQueryCommands: [

@@ -84,7 +84,7 @@ export async function runSetupIfNeeded(): Promise<void> {
     process.env.SLAD_CLI_PROMPT_MODE = "stdin";
     writeConfig({ providers: { defaultProvider: "cli", defaultAgent: "codex" } });
   } else if (basename === "claude") {
-    process.env.SLAD_CLI_ARGS = "--print";
+    process.env.SLAD_CLI_ARGS = "--print --dangerously-skip-permissions";
     process.env.SLAD_CLI_PROMPT_MODE = "arg";
     writeConfig({ providers: { defaultProvider: "cli", defaultAgent: "claude" } });
   } else if (basename === "pi") {
