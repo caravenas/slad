@@ -139,6 +139,14 @@ describe("parseAction", () => {
       assert.deepEqual(parseAction("/run --auto", null), { type: "run-auto" });
     });
 
+    it('"/run --parallel" → run-next parallel', () => {
+      assert.deepEqual(parseAction("/run --parallel", null), { type: "run-next", parallel: true });
+    });
+
+    it('"/run T2 --parallel" → unknown', () => {
+      assert.deepEqual(parseAction("/run T2 --parallel", null), { type: "unknown", input: "/run T2 --parallel" });
+    });
+
     it('"/auto" without session → unknown', () => {
       assert.deepEqual(parseAction("/auto", null), { type: "unknown", input: "/auto" });
     });
@@ -149,6 +157,14 @@ describe("parseAction", () => {
 
     it('"/auto crear login" → auto with intent', () => {
       assert.deepEqual(parseAction("/auto crear login", null), { type: "auto", intent: "crear login" });
+    });
+
+    it('"/auto --dry-run crear login" → auto dry-run with intent', () => {
+      assert.deepEqual(parseAction("/auto --dry-run crear login", null), {
+        type: "auto",
+        intent: "crear login",
+        dryRun: true,
+      });
     });
 
     it('"/run T2" → run-task', () => {

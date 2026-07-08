@@ -77,6 +77,28 @@ type ChatAction =
   | CliSlashLocalAction
   | { type: "unknown"; input: string };
 
+function parseAutoTail(tail: string, session: SessionState | null): ChatAction | null {
+  const parts = tail.split(/\s+/).filter(Boolean);
+  const dryRun = parts.includes("--dry-run");
+  const intent = parts.filter((part) => part !== "--dry-run").join(" ").trim() || session?.intent;
+  return intent ? { type: "auto", intent, ...(dryRun ? { dryRun } : {}) } : null;
+}
+
+function parseRunTail(tail: string): ChatAction | null {
+  if (!tail) return { type: "run-next" };
+  const parts = tail.split(/\s+/).filter(Boolean);
+  const parallel = parts.includes("--parallel");
+  const rest = parts.filter((part) => part !== "--parallel");
+
+  if (rest.length === 0) return { type: "run-next", ...(parallel ? { parallel } : {}) };
+  if (rest.length === 1 && /^T\d+$/i.test(rest[0]!)) {
+    if (parallel) return null;
+    return { type: "run-task", taskId: rest[0]!.toUpperCase() };
+  }
+  if (!parallel && rest.length === 1 && /^(--auto|auto|todo)$/i.test(rest[0]!)) return { type: "run-auto" };
+  return null;
+}
+
 function hasArtifact(session: SessionState | null, kind: string): boolean {
   return session?.artifacts.some((a: { kind: string }) => a.kind === kind) ?? false;
 }
@@ -96,9 +118,8 @@ export function parseAction(raw: string, _session: SessionState | null): ChatAct
     if (/^T\d+$/i.test(cmd)) return { type: "run-task", taskId: cmd.toUpperCase() };
 
     if (command) {
-      if (command.id === "run" && /^T\d+$/i.test(tail)) return { type: "run-task", taskId: tail.toUpperCase() };
-      if (command.id === "run" && /^(--auto|auto|todo)$/i.test(tail)) return { type: "run-auto" };
-      if (command.id === "auto" && tail) return { type: "auto", intent: tail };
+      if (command.id === "run") return parseRunTail(tail) ?? { type: "unknown", input: trimmed };
+      if (command.id === "auto") return parseAutoTail(tail, _session) ?? { type: "unknown", input: trimmed };
       if (command.id === "work-debate" && tail) return { type: "auto-debate", intent: tail };
       if (command.id === "explore" && tail) return { type: "explore", intent: tail };
       if (command.id === "agents") {
@@ -564,7 +585,7 @@ async function executeAction(
       break;
 
     case "run-next":
-      await safeCall(() => runCommand(base));
+      await safeCall(() => runCommand({ ...base, parallel: action.parallel }));
       break;
 
     case "learn":
@@ -581,6 +602,7 @@ async function executeAction(
           provider: opts.provider,
           agent: opts.agent,
           model: opts.model,
+          dryRun: action.dryRun,
         }),
       );
       break;

@@ -19,10 +19,10 @@ export type CliSlashLocalAction =
   | { type: "plan" }
   | { type: "run-auto" }
   | { type: "run-task"; taskId: string }
-  | { type: "run-next" }
+  | { type: "run-next"; parallel?: boolean }
   | { type: "learn" }
   | { type: "evolve" }
-  | { type: "auto"; intent: string }
+  | { type: "auto"; intent: string; dryRun?: boolean }
   | { type: "auto-debate"; intent: string }
   | { type: "status" }
   | { type: "stats" }

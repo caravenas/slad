@@ -119,7 +119,7 @@ export async function runCommand(opts: RunOpts): Promise<void> {
   log.title(`Run · ${providerName}${model ? ` · ${model}` : ""}`);
   console.log("");
 
-  const _hitl = createHitlTransport("tty");
+  const _hitl = createHitlTransport("tty", opts.nonInteractive ? { isTTY: () => false } : undefined);
   const harnessConfig = loadHarnessConfig(opts.harness ?? "on");
   const harness = harnessConfig.mode === "off"
     ? undefined
