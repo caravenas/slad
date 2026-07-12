@@ -1,11 +1,35 @@
 import { z } from "zod";
 import { PlanOutput, RunOutput, toCompactJson, type ChatMessage } from "@slad/shared";
 import { defineStage } from "../stage.js";
+import { isBlockingQuestion, mergeUnansweredQuestions } from "./util.js";
 import type { SladServices } from "./types.js";
 
 const DEFAULT_BUILDER_REVIEWER = "You are a builder-reviewer agent. Execute the task and output JSON only.";
 
 export type RunStageResult = RunOutput[];
+
+/**
+ * El run stage corre sin humano: "awaiting_human" no es un estado alcanzable.
+ * Una pregunta no bloqueante no impide cerrar la tarea; una bloqueante significa que
+ * el worker no hizo el trabajo, así que se reporta como "blocked" con las preguntas
+ * convertidas en followUps.
+ */
+function normalizeAwaitingHuman(output: RunOutput): RunOutput {
+  if (output.status !== "awaiting_human") return output;
+
+  const blocking = output.questions.filter(isBlockingQuestion);
+  if (blocking.length === 0) {
+    return { ...output, status: "completed", questions: [] };
+  }
+
+  return {
+    ...output,
+    status: "blocked",
+    summary: `Bloqueado sin decisión autónoma: ${output.summary}`,
+    followUps: mergeUnansweredQuestions(output.followUps, blocking),
+    questions: [],
+  };
+}
 
 export const runStage = defineStage<PlanOutput, RunStageResult, SladServices>({
   id: "run",
@@ -16,7 +40,7 @@ export const runStage = defineStage<PlanOutput, RunStageResult, SladServices>({
   cache: { enabled: false },
 
   async run(input, ctx) {
-    const { prompts, promptGuidance, hitl, harness, workspace, onTaskStart, onTaskComplete } = ctx.services;
+    const { prompts, promptGuidance, harness, workspace, onTaskStart, onTaskComplete } = ctx.services;
     const baseSystem = prompts?.builderReviewer ?? DEFAULT_BUILDER_REVIEWER;
     const system = promptGuidance ? promptGuidance("run", baseSystem) : baseSystem;
 
@@ -52,6 +76,7 @@ export const runStage = defineStage<PlanOutput, RunStageResult, SladServices>({
               summary: `Task denied by harness: ${verdict.reason}`,
               changedFiles: [],
               decisions: [],
+              assumptions: [],
               questions: [],
               humanAnswers: {},
               followUps: [],
@@ -72,48 +97,30 @@ export const runStage = defineStage<PlanOutput, RunStageResult, SladServices>({
         ].filter(Boolean).join("\n\n");
 
         const messages: ChatMessage[] = [{ role: "user", content: runUserContent }];
-        let output!: RunOutput;
-        const maxRounds = 3;
-        let rounds = 0;
+        let output: RunOutput;
 
-        while (rounds <= maxRounds) {
-          try {
-            output = await ctx.model.generateObject({
-              schema: RunOutput as z.ZodType<RunOutput>,
-              system,
-              messages,
-              temperature: 0.2,
-              maxTokens: 3000,
-            });
-          } catch (err) {
-            output = {
-              taskId: t.id,
-              status: "failed",
-              summary: `Failed to generate RunOutput: ${(err as Error).message}`,
-              changedFiles: [],
-              decisions: [],
-              questions: [],
-              humanAnswers: {},
-              followUps: [],
-              verification: [],
-              reviewerNotes: [],
-            };
-            break;
-          }
-
-          if (output.status !== "awaiting_human" || output.questions.length === 0 || !hitl) {
-            break;
-          }
-
-          if (rounds >= maxRounds || !hitl.canPrompt()) {
-            break;
-          }
-
-          const answers = await hitl.collectAnswers(output.questions);
-          const lines = Object.entries(answers).map(([id, value]) => `- ${id}: ${value}`);
-          messages.push({ role: "assistant", content: toCompactJson(output) });
-          messages.push({ role: "user", content: `Respuestas del humano:\n${lines.join("\n")}\n\nContinuá la tarea. Respondé ÚNICAMENTE con el JSON.` });
-          rounds++;
+        try {
+          output = normalizeAwaitingHuman(await ctx.model.generateObject({
+            schema: RunOutput as z.ZodType<RunOutput>,
+            system,
+            messages,
+            temperature: 0.2,
+            maxTokens: 3000,
+          }));
+        } catch (err) {
+          output = {
+            taskId: t.id,
+            status: "failed",
+            summary: `Failed to generate RunOutput: ${(err as Error).message}`,
+            changedFiles: [],
+            decisions: [],
+            assumptions: [],
+            questions: [],
+            humanAnswers: {},
+            followUps: [],
+            verification: [],
+            reviewerNotes: [],
+          };
         }
 
         if (harness) {

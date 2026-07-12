@@ -15,7 +15,7 @@ SDK incremental para ejecutar pipelines deterministas de SLAD sin depender del r
 
 - `provider?: ModelProvider` de `@slad/model-providers`
 - `harness?: ExecutionHarness` de `@slad/harness`
-- `hitl?: HITLTransport` de `@slad/hitl`
+- `hitl?: HITLTransport` de `@slad/hitl` para consumidores externos; los stages autónomos no lo usan
 - `tools?: ToolRegistry` de `@slad/tools`
 - `cache?: CacheStore<unknown>` de `@slad/cache`
 
@@ -43,4 +43,5 @@ const result = await runPipeline({ ...pipeline, input: "Build a feature" });
 
 ## Alcance de esta extracción
 
-Esta primera extracción crea el SDK y su boundary público. La migración completa de `@slad/cli` desde `commands/auto.ts` / `commands/run.ts` hacia stages nativos debe hacerse en iteraciones pequeñas para preservar compatibilidad del CLI y del dashboard.
+Los stages nativos son autónomos: convierten preguntas no resueltas en assumptions, open questions o follow-ups, en vez de pausar el pipeline para HITL.
+La aprobación humana del plan pertenece al límite del CLI antes de ejecutar `run`, no a un stage del pipeline.

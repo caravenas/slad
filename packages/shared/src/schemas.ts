@@ -174,6 +174,7 @@ export type ExploreOutput = z.infer<typeof ExploreOutput>;
 export const SnapshotOutput = z.object({
   status: z.enum(["completed", "awaiting_human"]).default("completed"),
   content: z.string().default(""),
+  assumptions: z.array(z.string()).default([]),
   questions: z.array(Question).default([]),
 });
 export type SnapshotOutput = z.infer<typeof SnapshotOutput>;
@@ -203,6 +204,36 @@ export const PlanOutput = z.object({
   decisions: z.array(DecisionRecord).default([]),
 });
 export type PlanOutput = z.infer<typeof PlanOutput>;
+
+export const PlanApprovalStatus = z.enum(["pending", "approved", "rejected", "superseded"]);
+export type PlanApprovalStatus = z.infer<typeof PlanApprovalStatus>;
+
+export const PlanApproval = z.object({
+  status: PlanApprovalStatus,
+  decidedAt: z.string().datetime().optional(),
+  reason: z.string().optional(),
+  planHash: z.string().min(1),
+});
+export type PlanApproval = z.infer<typeof PlanApproval>;
+
+export const PlanArtifactEnvelope = z.object({
+  kind: z.literal("plan"),
+  schemaVersion: z.literal(2),
+  planId: z.string().min(1),
+  sessionId: z.string().min(1),
+  revision: z.number().int().positive(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime().optional(),
+  supersedesPlanId: z.string().min(1).optional(),
+  approval: PlanApproval,
+  input: z.object({
+    intent: z.string(),
+    snapshot: SnapshotOutput,
+    digest: z.string(),
+  }),
+  plan: PlanOutput,
+});
+export type PlanArtifactEnvelope = z.infer<typeof PlanArtifactEnvelope>;
 
 export const RoutingMode = z.enum(["ask", "work", "work-debate"]);
 export type RoutingMode = z.infer<typeof RoutingMode>;
@@ -443,7 +474,7 @@ export const SLASH_COMMAND_CATALOG = SlashCommandCatalog.parse([
   {
     id: "auto",
     title: "Auto",
-    description: "Ejecutar el pipeline completo: explore, snapshot, plan, run y learn.",
+    description: "Generar un plan pendiente; tras aprobación, reanudar run y learn.",
     category: "pipeline",
     surfaces: SHARED_SURFACES,
     args: [],
@@ -456,7 +487,7 @@ export const SLASH_COMMAND_CATALOG = SlashCommandCatalog.parse([
   {
     id: "work-debate",
     title: "Work Debate",
-    description: "Ejecutar el pipeline completo con debate entre modelos en explore y plan.",
+    description: "Generar un plan pendiente con debate entre modelos en explore y plan.",
     category: "pipeline",
     surfaces: SHARED_SURFACES,
     args: [],
@@ -494,7 +525,7 @@ export const SLASH_COMMAND_CATALOG = SlashCommandCatalog.parse([
   {
     id: "plan",
     title: "Plan",
-    description: "Convertir un snapshot en un plan de tareas ejecutable.",
+    description: "Convertir un snapshot en un plan de tareas pendiente de aprobación.",
     category: "pipeline",
     surfaces: SHARED_SURFACES,
     args: [],
@@ -507,7 +538,7 @@ export const SLASH_COMMAND_CATALOG = SlashCommandCatalog.parse([
   {
     id: "run",
     title: "Run",
-    description: "Ejecutar la siguiente tarea del plan o el DAG completo.",
+    description: "Ejecutar la siguiente tarea del plan aprobado o el DAG completo.",
     category: "pipeline",
     surfaces: SHARED_SURFACES,
     args: [],
@@ -717,6 +748,7 @@ export const RunOutput = z.object({
     .default([]),
   reviewerNotes: z.array(z.string()).default([]),
   followUps: z.array(z.string()).default([]),
+  assumptions: z.array(z.string()).default([]),
   questions: z.array(Question).default([]),
   humanAnswers: z.record(z.string(), z.string()).default({}),
   decisions: z.array(DecisionRecord).default([]),

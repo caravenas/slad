@@ -5,14 +5,13 @@ import { runSladPipeline } from "@slad/pipeline";
 import { getModel, loadConfig, resolveProvider } from "../core/config.js";
 import { getSladProvider } from "../core/providers.js";
 import { log } from "../core/logger.js";
-import { writeArtifact, readArtifact } from "../persistence/index.js";
-import { pathForArtifact } from "../persistence/layout.js";
+import { writeArtifact } from "../persistence/index.js";
 import { readProjectMemory } from "../persistence/global-memory.js";
 import { createHitlTransport } from "@slad/hitl";
 import { createHarness } from "@slad/harness";
 import { loadHarnessConfig } from "@slad/harness";
 import * as prompts from "../agents/prompts.js";
-import { getActiveSession, appendArtifact, saveSession } from "../core/session.js";
+import { getActiveSession, appendArtifact, readSessionPlan, saveSession } from "../core/session.js";
 import { PlanOutput, type RunOutput } from "../core/types.js";
 import { ProviderError } from "../core/errors.js";
 import { runParallel } from "./run-parallel.js";
@@ -37,6 +36,7 @@ export interface RunOpts {
   strictOwnership?: boolean;
   worktrees?: boolean;
   keepWorktrees?: boolean;
+  bypass?: boolean;
 }
 
 export async function runCommand(opts: RunOpts): Promise<void> {
@@ -45,13 +45,22 @@ export async function runCommand(opts: RunOpts): Promise<void> {
   const session = opts.skipSession ? null : getActiveSession(cwd);
   const intent = session?.intent ?? "continue plan execution";
 
-  // Load the plan artifact from disk — the run stage needs PlanOutput as input
+  // Load the normalized plan envelope — execution requires explicit approval.
   let planInput: unknown | undefined;
   if (session) {
     try {
-      const planPath = await pathForArtifact("plan", session.id);
-      const result = await readArtifact("plan", planPath);
-      planInput = result.value;
+      const result = await readSessionPlan(session);
+      if (!result) {
+        log.error("No se encontró un plan para esta sesión. Ejecuta /plan primero.");
+        return;
+      }
+      const status = result.value.approval.status;
+      if (status !== "approved" && !opts.bypass) {
+        log.error(`El plan actual está ${status}; no se puede ejecutar.`);
+        log.dim("  Aprobalo con `slad pipeline plan --approve` o usá --bypass bajo tu responsabilidad.");
+        return;
+      }
+      planInput = result.value.plan;
     } catch {
       log.error("No se encontró un plan para esta sesión. Ejecuta /plan primero.");
       return;

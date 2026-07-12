@@ -10,15 +10,12 @@ import {
   stageArtifactDirName,
 } from "@slad/pipeline";
 import {
-  AutoHitlBlockedError,
   completedRunTaskIds,
-  formatAutoHitlBlockedMessage,
   isCompleteAutoStageOutput,
   normalizeSpuriousAwaitingHuman,
   planPendingRunTasks,
-  resolveAutoHitlQuestions,
 } from "./auto.js";
-import type { PlanOutput, Question, RunOutput } from "../core/types.js";
+import type { PlanOutput, RunOutput } from "../core/types.js";
 
 /**
  * Tests para el comando auto.
@@ -137,6 +134,7 @@ describe("auto helpers", () => {
         verification: [],
         reviewerNotes: [],
         followUps: [],
+        assumptions: [],
         decisions: [],
         questions: [],
         humanAnswers: {},
@@ -149,6 +147,7 @@ describe("auto helpers", () => {
         verification: [],
         reviewerNotes: [],
         followUps: [],
+        assumptions: [],
         decisions: [],
         questions: [],
         humanAnswers: {},
@@ -164,75 +163,6 @@ describe("auto helpers", () => {
     assert.equal(pending.recommendedFirstTask, "T2");
   });
 
-  it("resolveAutoHitlQuestions aplica defaults seguros sin intervención humana", () => {
-    const questions: Question[] = [
-      {
-        id: "confirm_scope",
-        prompt: "¿Usar scope propuesto?",
-        kind: "confirm",
-        default: "yes",
-        blocking: true,
-      },
-      {
-        id: "single_choice",
-        prompt: "Elegí provider",
-        kind: "choice",
-        choices: ["local"],
-        blocking: true,
-      },
-      {
-        id: "optional_note",
-        prompt: "Nota opcional",
-        kind: "free",
-        default: "sin nota",
-        blocking: false,
-      },
-    ];
-
-    const resolution = resolveAutoHitlQuestions("snapshot", questions);
-
-    assert.deepEqual(resolution.answers, {
-      confirm_scope: "yes",
-      single_choice: "local",
-      optional_note: "sin nota",
-    });
-    assert.deepEqual(resolution.unresolved, []);
-  });
-
-  it("resolveAutoHitlQuestions usa la regla de explore para elegir el primer approach", () => {
-    const questions: Question[] = [
-      {
-        id: "approach",
-        prompt: "¿Qué enfoque usar?",
-        kind: "choice",
-        choices: ["adaptar actual", "reescribir"],
-        blocking: true,
-      },
-    ];
-
-    const resolution = resolveAutoHitlQuestions("explore", questions);
-
-    assert.deepEqual(resolution.answers, { approach: "adaptar actual" });
-    assert.deepEqual(resolution.unresolved, []);
-  });
-
-  it("resolveAutoHitlQuestions deja unresolved cuando no hay política segura", () => {
-    const questions: Question[] = [
-      {
-        id: "target_file",
-        prompt: "¿Qué archivo edito?",
-        kind: "free",
-        blocking: true,
-      },
-    ];
-
-    const resolution = resolveAutoHitlQuestions("run", questions);
-
-    assert.deepEqual(resolution.answers, {});
-    assert.deepEqual(resolution.unresolved.map((q) => q.id), ["target_file"]);
-    assert.match(formatAutoHitlBlockedMessage("run", resolution.unresolved), /agregá un default seguro/i);
-    assert.match(new AutoHitlBlockedError("run", resolution.unresolved).message, /HITL automático bloqueado/);
-  });
 });
 
 // ─── PipelineStop (clase interna — testeada via comportamiento) ───────────────

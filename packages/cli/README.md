@@ -5,6 +5,7 @@ CLI de SLAD OS para ejecutar un pipeline tipado de agentes:
 `explore -> snapshot -> plan -> run -> learn -> evolve`
 
 Cada etapa produce JSON validado por Zod. Los comandos no deberían importar SDKs de vendors directamente: toda integración de modelo pasa por `ModelProvider`.
+El pipeline es autónomo: el auto-plan persiste un único `PlanArtifactEnvelope` pendiente y requiere aprobación explícita antes de ejecutar tareas.
 
 ## Instalación y uso rápido
 
@@ -18,25 +19,24 @@ slad --help
 Ejemplo mínimo de flujo:
 
 ```bash
-slad explore "quiero agregar cache de respuestas"
-slad snapshot
-slad plan
-slad run --task T1
+slad pipeline auto "quiero agregar cache de respuestas" --dry-run
+slad pipeline plan --approve
+slad pipeline run --task T1
 ```
 
 ## Comandos disponibles
 
 Comandos del inventario actual:
 
-- `auto` (HITL) - `src/commands/auto.ts` - output: `ExploreOutput`
+- `auto` - `src/commands/auto.ts` - output: plan pendiente de aprobación
 - `chat` - `src/commands/chat.ts`
-- `evolve` (HITL) - `src/commands/evolve.ts` - output: `EvolveOutput`
-- `explore` (HITL) - `src/commands/explore.ts` - output: `ExploreOutput`
-- `learn` (HITL) - `src/commands/learn.ts` - output: `LearnOutput`
-- `plan` (HITL) - `src/commands/plan.ts` - output: `PlanOutput`
-- `run` (HITL) - `src/commands/run.ts` - output: `RunOutput`
-- `sessionStart` (HITL) - `src/commands/session.ts`
-- `snapshot` (HITL) - `src/commands/snapshot.ts` - output: `SnapshotOutput`
+- `evolve` - `src/commands/evolve.ts` - output: `EvolveOutput`
+- `explore` - `src/commands/explore.ts` - output: `ExploreOutput`
+- `learn` - `src/commands/learn.ts` - output: `LearnOutput`
+- `plan` - `src/commands/plan.ts` - output: `PlanOutput`; use `--approve` or `--reject` for the active plan
+- `run` - `src/commands/run.ts` - output: `RunOutput`
+- `sessionStart` - `src/commands/session.ts`
+- `snapshot` - `src/commands/snapshot.ts` - output: `SnapshotOutput`
 - `stats` - `src/commands/stats.ts`
 
 ## Contrato de outputs
@@ -69,6 +69,7 @@ Schemas inventariados actualmente:
 - `InventorySchema`
 - `LearnOutput`
 - `PlanOutput`
+- `PlanArtifactEnvelope`
 - `PlanTask`
 - `ProjectConfig`
 - `ProjectInventory`
@@ -79,27 +80,15 @@ Schemas inventariados actualmente:
 - `SessionState`
 - `SnapshotOutput`
 
-## HITL (Human-in-the-loop)
+## Pipeline autónomo y aprobación de planes
 
-Contrato obligatorio para pausa humana:
-
-- `status: "awaiting_human"`
-- `questions[]` con preguntas estructuradas
-
-Esto aplica a comandos HITL y a respuestas intermedias del loop.
+Las etapas del pipeline no usan HITL ni reintentan preguntas del modelo.
+Las preguntas quedan registradas como assumptions, open questions o follow-ups según el output.
+`auto` persiste únicamente el plan v2 con `approval.status: "pending"`; aprobalo con `slad pipeline plan --approve` antes de `run` o de reanudar `auto`.
 
 ## Providers
 
-Providers inventariados:
-
-- `anthropic` (`src/models/anthropic.ts`) - SDK `@anthropic-ai/sdk`
-- `cli-discovery` (`src/models/cli-discovery.ts`)
-- `gemini` (`src/models/gemini.ts`) - SDK `@google/generative-ai`
-- `openai` (`src/models/openai.ts`) - SDK `openai`
-- `retry` (`src/models/retry.ts`)
-- `timeout` (`src/models/timeout.ts`)
-- `tool-loop` (`src/models/tool-loop.ts`)
-- `cli` (`src/models/cli.ts`) - binarios: `codex`, `gemini`, `claude`, `agent`
+El provider es `cli`, que ejecuta uno de los backends locales configurados: `claude`, `codex`, `pi` o `agy`.
 
 Nota para contribuidores: los comandos del CLI deben depender de `ModelProvider`, no de SDKs vendor directos.
 
@@ -108,23 +97,6 @@ Nota para contribuidores: los comandos del CLI deben depender de `ModelProvider`
 Mínimo recomendado:
 
 ```bash
-# Provider por defecto
-export SLAD_DEFAULT_PROVIDER=anthropic
-
-# Contexto opcional de wiki para explorer/evolve
-export SLAD_WIKI_PATH=/ruta/a/wiki
-
-# API keys por provider
-export ANTHROPIC_API_KEY=...
-export OPENAI_API_KEY=...
-export GEMINI_API_KEY=...
-
-# Modelo default global u overrides por provider
-export SLAD_MODEL=...
-export ANTHROPIC_MODEL=...
-export OPENAI_MODEL=...
-export GEMINI_MODEL=...
-
 # Timeout del provider CLI (ms)
 export SLAD_CLI_TIMEOUT_MS=1800000
 
@@ -149,9 +121,9 @@ El arnés de seguridad está habilitado y soporta modos:
 Uso en `run`/`auto`:
 
 ```bash
-slad run --task T1 --harness off
-slad run --task T1 --harness on
-slad run --task T1 --harness strict
+slad pipeline run --task T1 --harness off
+slad pipeline run --task T1 --harness on
+slad pipeline run --task T1 --harness strict
 ```
 
 El harness también puede tomar configuración desde `.slad-os/harness.json`.
@@ -161,25 +133,27 @@ El harness también puede tomar configuración desde `.slad-os/harness.json`.
 `explore`:
 
 ```bash
-slad explore "quiero añadir comando de limpieza de cache" --provider openai
+slad pipeline explore "quiero añadir comando de limpieza de cache" --provider cli
 ```
 
 `snapshot`:
 
 ```bash
-slad snapshot --intent "definir estrategia de cache" --provider anthropic
+slad pipeline snapshot --intent "definir estrategia de cache" --provider cli
 ```
 
 `plan`:
 
 ```bash
-slad plan --input ./docs/log/snapshots/<sessionId>.md --provider gemini
+slad pipeline plan --input ./docs/log/snapshots/<sessionId>.json --provider cli
+slad pipeline plan --approve
 ```
 
 `run`:
 
 ```bash
-slad run --input ./docs/log/plans/<sessionId>.md --task T1 --harness on
+slad pipeline run --task T1 --harness on
+slad pipeline run --parallel --bypass   # override explícito si necesitás ejecutar un plan no aprobado
 ```
 
 Tests (`node:test`):
@@ -199,5 +173,5 @@ node --import tsx/esm --test 'src/**/*.test.ts'
 ## Notas para contribuidores
 
 - Mantener compatibilidad de imports internos vía `src/core/types.ts`.
-- En `run`, el estado HITL se representa con `status: "awaiting_human"` y `questions[]`.
+- No agregar pausas HITL a los stages del pipeline; registrar incertidumbre en el campo de output correspondiente.
 - Evitar cambios fuera de scope al actualizar documentación: reflejar sólo lo que existe en código.

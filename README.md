@@ -16,7 +16,7 @@ Its flagship feature is parallel plan execution: one agent worker per task, each
 Agent CLIs are excellent at single tasks but unstructured for larger work.
 SLAD adds what a solo agent session lacks:
 
-- **Explicit stages with reviewable artifacts.** Every stage writes JSON to `docs/log/` (explore analysis, snapshot spec, task plan, per-task run reports), tied together by a session.
+- **Reviewable execution boundary.** Auto-planning persists one versioned plan artifact under `docs/log/plans/`; run reports are persisted per task. Explore and snapshot are transient planning inputs.
 - **Safe parallelism.** The plan is a task DAG with per-task file ownership; SLAD schedules waves of tasks whose files don't overlap and runs one worker per task.
 - **Real isolation when you want it.** With `--worktrees`, workers physically cannot touch each other's files, and you get per-task change attribution.
 - **A memory loop.** `learn` extracts decisions/errors/patterns from run reports; `evolve` proposes prompt/wiki updates; both can feed a global cross-project memory — and parallel workers read the project's global memory entry back in their handoff prompts.
@@ -47,10 +47,14 @@ cd your-project
 # Sanity check: one round-trip through the auto-detected backend
 slad ask "what does this repo do?"
 
-# Analyze an intent and produce a plan (no code changes yet)
+# Analyze an intent and produce a pending plan (no code changes yet)
 slad pipeline auto "add input validation to the signup form" --dry-run
 
-# Execute the plan: independent tasks run in parallel workers
+# Review and approve the generated plan
+cat docs/log/plans/<session>.json
+slad pipeline plan --approve
+
+# Execute the approved plan: independent tasks run in parallel workers
 slad pipeline run --parallel
 ```
 
@@ -60,9 +64,10 @@ slad pipeline run --parallel
 
 ```bash
 slad pipeline auto "migrate the config module from JSON to TOML" --dry-run
-# → writes explore/snapshot/plan artifacts under docs/log/, creates a session
+# → writes one pending plan artifact under docs/log/plans/, creates a session
 
 cat docs/log/plans/<session>.json   # review tasks, dependencies, per-task files
+slad pipeline plan --approve         # mark the exact plan hash as approved
 
 slad pipeline run --parallel --max-parallel 3
 ```
@@ -143,19 +148,20 @@ Pipeline runtime (`slad pipeline …`):
 
 | Command | Description |
 |---|---|
-| `auto <intent>` (alias `work`) | Full loop: explore → snapshot → plan → run → learn |
+| `auto <intent>` (alias `work`) | Plans autonomously, then stops for explicit plan approval; resumes the remaining loop after approval |
 | `explore <intent>` | Approaches, risks, and next steps for an intent |
 | `snapshot` | Mini-spec from the explore output |
 | `plan` | Executable task DAG from the snapshot |
-| `run [task]` | Execute one task, `--auto` for the whole DAG, `--parallel` for waves |
+| `run [task]` | Execute an approved plan; use `--auto` for the whole DAG, `--parallel` for waves, or `--bypass` to override approval |
 | `learn` | Capture decisions/errors/patterns from run reports |
 | `evolve` | Propose wiki/prompt updates from recent artifacts |
 | `session` | Manage work sessions (start, list, use, show) |
 | `agents` | List pipeline personas (prompt sets) |
 
-Key flags for `run --parallel`:
+Key flags for `run` / `run --parallel`:
 
 ```
+--bypass              execute even if the active plan is not approved
 --max-parallel <n>    max concurrent workers (default: 3)
 --worktrees           per-task git worktrees + sequential merge + final squash
 --keep-worktrees      keep session worktrees/branches for debugging
@@ -185,7 +191,7 @@ This is a pnpm + Turborepo monorepo.
 | `@slad/model-providers` | `ModelProvider` seam + `CliProvider` (spawns agent CLIs) + `ModelAdapter` (`generateObject` / `generateText` with auto-fix JSON) |
 | `@slad/tools` | `defineTool()`, `ToolRegistry`, 9 builtin tools (`fs.readFile`, `shell.exec`, …) |
 | `@slad/harness` | Execution harness: command classification, hooks, LDJSON audit log, `assertPermission()` |
-| `@slad/hitl` | Human-in-the-loop transports (TTY, none) |
+| `@slad/hitl` | Optional human-input transport for consumers outside the autonomous pipeline stages |
 | `@slad/cache` | Stage output cache (`CacheStore`) |
 | `@slad/pipeline` | `defineStage`, `runPipeline`, `buildSladPipeline`, the 5 SLAD stages, `createAgent()`, memory/telemetry providers, budget tracking |
 | `@slad/cli` | The `slad` orchestrator CLI |

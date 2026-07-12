@@ -19,12 +19,18 @@ import { hashStructured, hashText, readOrCreateReusableValue } from "@slad/cache
 import { projectContextBlock } from "../core/context.js";
 import {
   getOrCreateSession,
+  getActiveSession,
   lastArtifactPath,
   appendArtifact,
   saveSession,
   sessionContextBlock,
 } from "../core/session.js";
-import { readArtifact, writeArtifact } from "../persistence/index.js";
+import {
+  approvePlan,
+  readArtifact,
+  rejectPlan,
+  writePendingPlan,
+} from "../persistence/index.js";
 
 export interface PlanOpts {
   input?: string;
@@ -34,6 +40,9 @@ export interface PlanOpts {
   output?: string;
   json?: boolean;
   skipSession?: boolean;
+  approve?: boolean;
+  reject?: boolean;
+  reason?: string;
 }
 
 function extractJson(raw: string): string {
@@ -198,6 +207,34 @@ export async function generatePlanOutput(options: {
 }
 
 export async function planCommand(opts: PlanOpts): Promise<void> {
+  if (opts.approve || opts.reject) {
+    if (opts.approve && opts.reject) {
+      log.error("Usá solo una de --approve o --reject.");
+      return;
+    }
+    if (opts.skipSession) {
+      log.error("La aprobación de un plan requiere una sesión activa.");
+      return;
+    }
+
+    const session = getActiveSession();
+    const planPath = session ? lastArtifactPath(session, "plan") : undefined;
+    if (!planPath) {
+      log.error("No se encontró un plan en la sesión activa.");
+      return;
+    }
+
+    try {
+      const plan = opts.approve
+        ? await approvePlan(planPath, { reason: opts.reason })
+        : await rejectPlan(planPath, { reason: opts.reason });
+      log.success(`Plan ${plan.approval.status}: ${planPath}`);
+    } catch (err) {
+      log.error((err as Error).message);
+    }
+    return;
+  }
+
   const session = opts.skipSession ? null : getOrCreateSession("plan");
 
   // Resolve input from session if not explicit
@@ -304,6 +341,24 @@ export async function planCommand(opts: PlanOpts): Promise<void> {
     rounds++;
   }
 
+  if (session) {
+    try {
+      const snapshotArtifact = await readArtifact("snapshot", inputPath);
+      const written = await writePendingPlan({
+        sessionId: session.id,
+        intent: session.intent,
+        snapshot: snapshotArtifact.value,
+        plan: output,
+      });
+      saveSession(appendArtifact(session, "plan", written.ref.path));
+      log.success(`Plan pendiente de aprobación: ${written.ref.path}`);
+      log.dim("  aprobalo con `slad pipeline plan --approve` antes de ejecutar run.");
+    } catch (err) {
+      log.error(`No se pudo persistir el plan pendiente: ${(err as Error).message}`);
+      return;
+    }
+  }
+
   const json = JSON.stringify(output, null, 2);
   if (opts.json && !opts.output) {
     console.log(json);
@@ -334,10 +389,5 @@ export async function planCommand(opts: PlanOpts): Promise<void> {
     console.log("  → " + output.recommendedFirstTask);
   }
 
-  if (session) {
-    const ref = await writeArtifact("plan", output, { sessionId: session.id });
-    saveSession(appendArtifact(session, "plan", ref.path));
-    log.success(`Guardado en ${ref.path}`);
-    log.dim(`  sesión: ${session.id}`);
-  }
+  if (session) log.dim(`  sesión: ${session.id}`);
 }

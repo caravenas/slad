@@ -1,5 +1,7 @@
 # SLAD OS Roadmap & Status
 
+> Historical roadmap. Entries that describe universal HITL, automatic HITL resolution, or intermediate auto artifacts document the pre-autonomous-plan design and are not current behavior.
+
 > Última actualización: 2026-05-12 (post JSON persistence refactor)
 
 ## Criterios de Madurez (Glosario)

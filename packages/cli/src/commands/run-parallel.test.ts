@@ -203,6 +203,7 @@ describe("isPhantomCompletion", () => {
       questions: [],
       humanAnswers: {},
       followUps: [],
+      assumptions: [],
       verification: [],
       reviewerNotes: [],
     };

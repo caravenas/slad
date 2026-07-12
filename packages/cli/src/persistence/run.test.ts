@@ -23,6 +23,7 @@ function makeRunOutput(overrides: Partial<RunOutput> = {}): RunOutput {
     ],
     reviewerNotes: ["Verified no collisions with existing cache entries", "No performance regression"],
     followUps: ["Consider adding TTL-based eviction", "Document the new salt format"],
+    assumptions: [],
     questions: [],
     humanAnswers: {},
     decisions: [],

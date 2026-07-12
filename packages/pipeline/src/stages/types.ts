@@ -1,18 +1,22 @@
 import type { ModelProvider } from "@slad/model-providers";
 import type { ExecutionHarness } from "@slad/harness";
-import type { HITLTransport } from "@slad/hitl";
 import type { ToolRegistry } from "@slad/tools";
 import type { CacheStore } from "@slad/cache";
 import type { PipelineServices } from "../types.js";
 import type { DecisionRecord } from "@slad/shared";
 
-/** Services bag que los SLAD stages requieren */
+/**
+ * Services bag que los SLAD stages requieren.
+ *
+ * Los stages no usan HITL: deciden de forma autónoma y registran assumptions /
+ * openQuestions. `hitl` sigue disponible vía PipelineServices para consumidores
+ * externos al pipeline (comandos del CLI), pero ningún stage lo lee.
+ */
 export interface SladServices extends PipelineServices {
   provider: ModelProvider;       // required
   /** Default model id passed to every provider call (providers may override per call). */
   model?: string;
   harness?: ExecutionHarness;
-  hitl?: HITLTransport;
   tools?: ToolRegistry;
   cache?: CacheStore<unknown>;
   /** System prompts inyectables — el CLI pasa los suyos, Hermes puede sustituirlos */

@@ -8,16 +8,9 @@ import { getSladProvider } from "../core/providers.js";
 import { log } from "../core/logger.js";
 import { createHarness } from "@slad/harness";
 import { loadHarnessConfig } from "@slad/harness";
-
-import {
-  autoResolveExplore,
-  autoResolveGeneric,
-  autoResolvePlan,
-  type HITLTransport,
-} from "@slad/hitl";
 import { getActiveAgent } from "../agents/registry.js";
-import { writeArtifact, readArtifact } from "../persistence/index.js";
-import { getOrCreateSession, getActiveSession, appendArtifact, saveSession } from "../core/session.js";
+import { writeArtifact, readArtifact, writePendingPlan } from "../persistence/index.js";
+import { getOrCreateSession, getActiveSession, appendArtifact, readSessionPlan, saveSession } from "../core/session.js";
 import { appendBudgetHistory } from "@slad/pipeline";
 import { getDocsRoot } from "../persistence/layout.js";
 import { ProviderError } from "../core/errors.js";
@@ -25,7 +18,7 @@ import { classifyIntent } from "../core/classifier.js";
 import { askCommand } from "./ask.js";
 import { appendAgentRunLog } from "../persistence/telemetry.js";
 import { select } from "@inquirer/prompts";
-import type { PlanOutput, Question, RunOutput, SessionState } from "../core/types.js";
+import { SnapshotOutput, type PlanOutput, type RunOutput, type SessionState } from "../core/types.js";
 
 export interface AutoOpts {
   provider?: string;
@@ -51,33 +44,6 @@ const AUTO_STAGE_ORDER = ["explore", "snapshot", "plan", "run", "learn"] as cons
 type AutoStageOutput = {
   status?: string;
   taskId?: string;
-};
-
-type AutoHitlStageId = SladPipelineStageId | "unknown";
-
-type AutoHitlQuestionMetadata = {
-  id: string;
-  prompt: string;
-  kind: string;
-  blocking: boolean;
-  choices?: string[];
-  default?: string;
-  context?: string;
-};
-
-type AutoHitlRequestMetadata = {
-  stage: AutoHitlStageId;
-  taskId?: string;
-  status: "resolved" | "blocked" | "awaiting_human";
-  questions: AutoHitlQuestionMetadata[];
-  answers: Record<string, string>;
-  unresolved: string[];
-  createdAt: string;
-};
-
-export type AutoHitlResolution = {
-  answers: Record<string, string>;
-  unresolved: Question[];
 };
 
 /**
@@ -142,111 +108,11 @@ class AutoStageIncompleteError extends Error {
   }
 }
 
-export class AutoHitlBlockedError extends Error {
-  constructor(stage: AutoHitlStageId, questions: readonly Question[]) {
-    super(formatAutoHitlBlockedMessage(stage, questions));
-    this.name = "AutoHitlBlockedError";
-  }
-}
-
-export function resolveAutoHitlQuestions(
-  stage: AutoHitlStageId,
-  questions: readonly Question[],
-): AutoHitlResolution {
-  const output = { status: "awaiting_human", questions: [...questions] };
-  const answers = stage === "explore"
-    ? autoResolveExplore(output)
-    : stage === "plan"
-      ? autoResolvePlan(output)
-      : autoResolveGeneric(output);
-  const unresolved = questions.filter((question) => answers[question.id] === undefined);
-  return { answers, unresolved };
-}
-
-export function formatAutoHitlBlockedMessage(stage: AutoHitlStageId, questions: readonly Question[]): string {
-  const details = questions
-    .map((question) => {
-      const choices = question.choices?.length ? ` choices=${question.choices.join("|")}` : "";
-      const defaultValue = question.default !== undefined ? ` default=${question.default}` : " sin default";
-      return `${question.id} (${question.kind}, ${question.blocking ? "blocking" : "non-blocking"}): ${question.prompt}${choices}${defaultValue}`;
-    })
-    .join("; ");
-  return [
-    `HITL automático bloqueado en '${stage}'.`,
-    "No hay default ni política automática segura para continuar sin intervención humana.",
-    `Preguntas pendientes: ${details || "sin detalle"}.`,
-    "Acción: agregá un default seguro, reducí las opciones a una sola alternativa segura o ejecutá el stage interactivo para responder y luego reintentá /auto.",
-  ].join(" ");
-}
-
-function collectAutoHitlAnswers(
-  stage: AutoHitlStageId,
-  questions: readonly Question[],
-  metadata: AutoHitlRequestMetadata[],
-): Record<string, string> {
-  const { answers, unresolved } = resolveAutoHitlQuestions(stage, questions);
-  metadata.push({
-    stage,
-    status: unresolved.length > 0 ? "blocked" : "resolved",
-    questions: questions.map(serializeQuestion),
-    answers,
-    unresolved: unresolved.map((question) => question.id),
-    createdAt: new Date().toISOString(),
-  });
-  if (unresolved.length > 0) {
-    throw new AutoHitlBlockedError(stage, unresolved);
-  }
-  return answers;
-}
-
-function recordAwaitingHumanMetadata(
-  stage: SladPipelineStageId,
-  output: unknown,
-  metadata: AutoHitlRequestMetadata[],
-): void {
-  for (const item of awaitingHumanItems(output)) {
-    metadata.push({
-      stage,
-      ...(item.taskId ? { taskId: item.taskId } : {}),
-      status: "awaiting_human",
-      questions: item.questions.map(serializeQuestion),
-      answers: {},
-      unresolved: item.questions.map((question) => question.id),
-      createdAt: new Date().toISOString(),
-    });
-  }
-}
-
-function awaitingHumanItems(output: unknown): { taskId?: string; questions: Question[] }[] {
-  const values = Array.isArray(output) ? output : [output];
-  return values.flatMap((value) => {
-    if (!isRecord(value) || value.status !== "awaiting_human") return [];
-    const questions = Array.isArray(value.questions)
-      ? value.questions.filter(isQuestion)
-      : [];
-    if (questions.length === 0) return [];
-    const taskId = typeof value.taskId === "string" ? value.taskId : undefined;
-    return [{ ...(taskId ? { taskId } : {}), questions }];
-  });
-}
-
-function isQuestion(value: unknown): value is Question {
+function isQuestion(value: unknown): value is { blocking?: boolean } {
   return isRecord(value)
     && typeof value.id === "string"
     && typeof value.prompt === "string"
     && typeof value.kind === "string";
-}
-
-function serializeQuestion(question: Question): AutoHitlQuestionMetadata {
-  return {
-    id: question.id,
-    prompt: question.prompt,
-    kind: question.kind,
-    blocking: question.blocking,
-    ...(question.choices ? { choices: [...question.choices] } : {}),
-    ...(question.default !== undefined ? { default: question.default } : {}),
-    ...(question.context ? { context: question.context } : {}),
-  };
 }
 
 function outputStatus(output: unknown): string {
@@ -309,9 +175,9 @@ async function resolveAutoResume(
     return index === -1 ? [] : targetStages.slice(index);
   };
 
-  const snapshot = await readLatestCompleteStageArtifact(session, "snapshot");
-  const plan = snapshot ? await readLatestCompleteStageArtifact(session, "plan") as PlanOutput | undefined : undefined;
-  if (snapshot && plan) {
+  const persistedPlan = await readSessionPlan(session);
+  const plan = persistedPlan?.value.plan;
+  if (plan) {
     const runOutputs = await readCompleteRunOutputs(session);
     const completedTasks = completedRunTaskIds(plan, runOutputs);
     const allPlanTasksCompleted = plan.tasks.length > 0 && plan.tasks.every((task) => completedTasks.has(task.id));
@@ -334,15 +200,6 @@ async function resolveAutoResume(
           : "retomando desde run",
       };
     }
-  }
-
-  if (snapshot && hasTarget("plan")) {
-    return { stages: firstTargetAt("plan"), input: snapshot, note: "retomando desde plan" };
-  }
-
-  const explore = await readLatestCompleteStageArtifact(session, "explore");
-  if (explore && hasTarget("snapshot")) {
-    return { stages: firstTargetAt("snapshot"), input: explore, note: "retomando desde snapshot" };
   }
 
   return { stages: [...targetStages], input: { intent } };
@@ -440,19 +297,6 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
 
   let spinner = ora("Iniciando pipeline...").start();
 
-  let currentStage: AutoHitlStageId = "unknown";
-  const hitlMetadata: AutoHitlRequestMetadata[] = [];
-  const hitl: HITLTransport = {
-    kind: "tty",
-    canPrompt: () => true,
-    canInteract: () => false,
-    askQuestion: async (question) => {
-      const answers = collectAutoHitlAnswers(currentStage, [question], hitlMetadata);
-      return answers[question.id] ?? "";
-    },
-    collectAnswers: async (questions) => collectAutoHitlAnswers(currentStage, questions, hitlMetadata),
-  };
-
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
 
@@ -467,9 +311,22 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   );
   let existingSession = opts.fresh ? null : getActiveSession();
   let activeSession = existingSession ?? getOrCreateSession(intent);
+  const currentPlan = existingSession ? await readSessionPlan(existingSession) : null;
+  if (currentPlan && currentPlan.value.approval.status !== "approved") {
+    if (spinner.isSpinning) spinner.stop();
+    log.error(`El plan actual está ${currentPlan.value.approval.status}; auto no lo regenerará ni ejecutará.`);
+    log.dim("  Revisalo y ejecutá `slad pipeline plan --approve`; luego usá `slad pipeline auto --resume \"…\"`.");
+    return;
+  }
+
+  if (!currentPlan) {
+    pipelineStages = pipelineStages.filter((stage) => stage === "explore" || stage === "snapshot" || stage === "plan");
+  }
+
   const resume = await resolveAutoResume(existingSession, pipelineStages, intent);
   pipelineStages = resume.stages;
   const resumeInput = resume.input;
+  let latestSnapshot = SnapshotOutput.safeParse(resumeInput).data;
   if (resume.note) {
     spinner.text = resume.note;
   }
@@ -497,7 +354,6 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   const agent = createAgent({
     model: provider,
     safety: harness,
-    hitl,
     pipeline,
   });
 
@@ -505,9 +361,6 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
     resumeInput ?? { intent },
     {
       onStageStart: (stage: string) => {
-        currentStage = AUTO_STAGE_ORDER.includes(stage as SladPipelineStageId)
-          ? stage as SladPipelineStageId
-          : "unknown";
         if (spinner.isSpinning) spinner.stop();
         spinner = ora(kleur.dim(`${stage}...`)).start();
       },
@@ -518,7 +371,29 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
           process.stdout.write(kleur.yellow(`  ⚠ ${stageId}: awaiting_human sin preguntas bloqueantes — tratado como completed\n`));
           artifact = normalized;
         }
-        if (stageId === "run") {
+        if (stageId === "explore") {
+          if (!isCompleteAutoStageOutput(stageId, artifact)) {
+            throw new AutoStageIncompleteError(stageId, outputStatus(artifact));
+          }
+          return;
+        }
+
+        if (stageId === "snapshot") {
+          latestSnapshot = SnapshotOutput.parse(artifact);
+        } else if (stageId === "plan") {
+          if (!latestSnapshot) {
+            throw new Error("No hay snapshot válido para persistir el plan pendiente.");
+          }
+          const written = await writePendingPlan({
+            sessionId: activeSession!.id,
+            intent: activeSession!.intent,
+            snapshot: latestSnapshot,
+            plan: artifact as PlanOutput,
+          });
+          activeSession = appendArtifact(activeSession!, "plan", written.ref.path);
+          saveSession(activeSession);
+          process.stdout.write(kleur.yellow("  Plan pendiente de aprobación. Ejecutá `slad pipeline plan --approve` para continuar.\n"));
+        } else if (stageId === "run") {
           const outputs = Array.isArray(artifact) ? (artifact as RunOutput[]) : [artifact as RunOutput];
           for (const output of outputs) {
             const ref = await writeArtifact("run", output, { sessionId: activeSession!.id });
@@ -532,7 +407,6 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
         }
 
         if (!isCompleteAutoStageOutput(stageId, artifact)) {
-          recordAwaitingHumanMetadata(stageId, artifact, hitlMetadata);
           throw new AutoStageIncompleteError(stageId, outputStatus(artifact));
         }
       },
@@ -565,9 +439,6 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   writeAutoReport({
     status: result.status,
     outputs,
-    metadata: {
-      hitl: hitlMetadata,
-    },
   }, { docsRoot, basename: "auto" });
 
   appendBudgetHistory({

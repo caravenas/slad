@@ -1,8 +1,12 @@
 import {
+  PlanApprovalStatus,
+  PlanArtifactEnvelope,
+  RunOutput,
   SLASH_COMMAND_CATALOG,
   SlashCommand,
   SlashCommandArg,
   SlashCommandCatalog,
+  SnapshotOutput,
   renderSlashCommandSignature,
   type SlashCommand as SlashCommandType,
 } from "./schemas.js";
@@ -198,5 +202,61 @@ describe("SlashCommand", () => {
     assert.equal(parsed.config.requiresWorkspaceTrust, true);
     assert.equal(parsed.config.requiresProvider, true);
     assert.equal(parsed.config.requiresPlan, true);
+  });
+});
+
+describe("PlanArtifactEnvelope", () => {
+  const envelope = {
+    kind: "plan",
+    schemaVersion: 2,
+    planId: "plan-2",
+    sessionId: "session-1",
+    revision: 1,
+    createdAt: "2026-07-12T12:00:00.000Z",
+    approval: {
+      status: "pending",
+      planHash: "sha256:abc123",
+    },
+    input: {
+      intent: "Add plan approval metadata.",
+      snapshot: { content: "Current state." },
+      digest: "snapshot-digest",
+    },
+    plan: {
+      snapshot: "Current state.",
+      summary: "Add the shared plan envelope.",
+    },
+  };
+
+  it("parses the versioned plan artifact envelope", () => {
+    const parsed = PlanArtifactEnvelope.parse(envelope);
+
+    assert.equal(parsed.kind, "plan");
+    assert.equal(parsed.schemaVersion, 2);
+    assert.equal(parsed.approval.status, "pending");
+    assert.deepEqual(parsed.input.snapshot.assumptions, []);
+  });
+
+  it("supports every approval state", () => {
+    for (const status of PlanApprovalStatus.options) {
+      const parsed = PlanArtifactEnvelope.parse({
+        ...envelope,
+        approval: {
+          ...envelope.approval,
+          status,
+          ...(status === "approved" ? { decidedAt: "2026-07-12T12:01:00.000Z" } : {}),
+        },
+      });
+
+      assert.equal(parsed.approval.status, status);
+    }
+  });
+
+  it("defaults snapshot and run assumptions to empty arrays", () => {
+    assert.deepEqual(SnapshotOutput.parse({}).assumptions, []);
+    assert.deepEqual(
+      RunOutput.parse({ taskId: "T1", status: "completed", summary: "Done." }).assumptions,
+      [],
+    );
   });
 });

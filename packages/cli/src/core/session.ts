@@ -13,6 +13,7 @@ import {
 import { SessionError } from "./errors.js";
 import { SessionState, type SessionArtifactKind, type SessionAnswer } from "./types.js";
 import { artifactDirSync } from "../persistence/layout.js";
+import { readPlan, type ReadPlanResult } from "../persistence/index.js";
 
 function sessionsRoot(cwd: string): string {
   return artifactDirSync("session", cwd);
@@ -223,6 +224,25 @@ export function lastArtifactPath(
   kind: SessionArtifactKind,
 ): string | undefined {
   return [...session.artifacts].reverse().find((a) => a.kind === kind)?.path;
+}
+
+/**
+ * Reads the session's most recent plan artifact, normalized to a v2 envelope.
+ * Returns null when the session has no plan (or its file is gone).
+ */
+export async function readSessionPlan(session: SessionState): Promise<ReadPlanResult | null> {
+  const planPath = lastArtifactPath(session, "plan");
+  if (!planPath || !fs.existsSync(planPath)) return null;
+  return readPlan(planPath);
+}
+
+/**
+ * True only when the session's latest plan carries an explicit human approval.
+ * A missing, legacy, pending, rejected, or superseded plan is not approved.
+ */
+export async function isSessionPlanApproved(session: SessionState): Promise<boolean> {
+  const plan = await readSessionPlan(session);
+  return plan?.value.approval.status === "approved";
 }
 
 export function sessionContextBlock(session: SessionState): string {

@@ -46,11 +46,13 @@ Configuración y estado:
 
 Pipeline runtime (avanzado):
 
-  $ slad pipeline auto "agregar autenticación" # explore→snapshot→plan→run→learn
+  $ slad pipeline auto "agregar autenticación" # plan autónomo pendiente
+  $ slad pipeline plan --approve               # aprobar el plan activo
+  $ slad pipeline run --parallel               # ejecutar el plan aprobado
   $ slad pipeline --help                       # stages, sesiones y personas
 
-  Todo el flujo legacy (explore/snapshot/plan/run/learn/evolve, sesiones y la
-  persona "developer") vive bajo  slad pipeline …
+  El runtime explore/snapshot/plan/run/learn/evolve, sus sesiones y la persona
+  "developer" viven bajo  slad pipeline …
 `,
   );
 
@@ -81,19 +83,21 @@ program
 // live under `slad pipeline …`, keeping the top level focused on the Agent Kit.
 const pipelineCmd = program
   .command("pipeline")
-  .description("Runtime del pipeline (legacy): explore → snapshot → plan → run → learn → evolve.")
+  .description("Runtime del pipeline: explore → snapshot → plan pendiente → aprobación → run → learn → evolve.")
   .addHelpText(
     "after",
     `
 Flujo completo:
 
-  $ slad pipeline auto "agregar autenticación"        # explore→…→learn de una
+  $ slad pipeline auto "agregar autenticación"        # genera un plan pendiente
+  $ slad pipeline plan --approve                      # aprueba el plan activo
+  $ slad pipeline run --parallel                      # ejecuta el plan aprobado
   $ slad pipeline session start "agregar autenticación"
 
 Por stages:
 
   $ slad pipeline explore "agregar autenticación"
-  $ slad pipeline snapshot && slad pipeline plan && slad pipeline run T1
+  $ slad pipeline snapshot && slad pipeline plan && slad pipeline plan --approve && slad pipeline run T1
   $ slad pipeline learn && slad pipeline evolve
 
 Personas del pipeline:
@@ -135,13 +139,16 @@ pipelineCmd
 
 pipelineCmd
   .command("plan")
-  .description("Planner Agent: convierte un Snapshot en tasks.json ejecutable.")
-  .option("-i, --input <path>", "Ruta a un snapshot.md (default: último snapshot de la sesión activa)")
+  .description("Planner Agent: convierte un Snapshot en un plan pendiente de aprobación.")
+  .option("-i, --input <path>", "Ruta a un snapshot.md o snapshot JSON legacy (default: último snapshot de la sesión activa)")
   .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
   .option("-p, --provider <name>", "Provider del modelo (cli)  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. sonnet, openai-codex/gpt-5.5)  [default: $CLI_MODEL / $SLAD_MODEL]")
-  .option("-o, --output <path>", "Ruta de salida del JSON (default: ./tasks/tasks.json)")
+  .option("-o, --output <path>", "[DEPRECATED] Ignorado; los planes de sesión se guardan en <docsRoot>/log/plans/")
   .option("--json", "Imprimir JSON plano en stdout en lugar del resumen legible")
+  .option("--approve", "Aprobar el plan actual de la sesión sin generar uno nuevo")
+  .option("--reject", "Rechazar el plan actual de la sesión sin generar uno nuevo")
+  .option("--reason <text>", "Motivo opcional al aprobar o rechazar un plan")
   .option("--skip-session", "Ignorar sesión activa (comportamiento v0.1.0)")
   .action(async (opts) => {
     await planCommand(opts);
@@ -149,15 +156,15 @@ pipelineCmd
 
 pipelineCmd
   .command("run")
-  .description("Builder + Reviewer: ejecuta una tarea de tasks.json y guarda un reporte.")
+  .description("Builder + Reviewer: ejecuta tareas del plan aprobado y guarda reportes.")
   .argument("[task]", "Task id a ejecutar (ej. T2). Alternativa a --task")
-  .option("-i, --input <path>", "Ruta a tasks.json (default: ./tasks/tasks.json)")
+  .option("-i, --input <path>", "[DEPRECATED] Ignorado; run usa el plan activo de la sesión")
   .option("-t, --task <id>", "Task id a ejecutar (default: recommendedFirstTask)")
   .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
   .option("-p, --provider <name>", "Provider del modelo (cli)  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. sonnet, openai-codex/gpt-5.5)  [default: $CLI_MODEL / $SLAD_MODEL]")
   .option("-o, --output <path>", "[DEPRECATED] Ignorado; los runs se guardan en <docsRoot>/log/runs/")
-  .option("--max-rounds <n>", "Máximo de rounds HITL antes de marcar blocked (default: 3)", parseInt)
+  .option("--max-rounds <n>", "[DEPRECATED] Ignorado; los stages del pipeline no usan HITL", parseInt)
   .option("--auto", "Ejecutar el DAG completo de tareas automáticamente")
   .option("--max-tasks <n>", "Budget de ejecuciones en modo --auto (default: 10)", parseInt)
   .option("--parallel", "Ejecutar el plan en olas paralelas: un worker CLI por tarea (ventana tmux si $TMUX está seteado)")
@@ -165,6 +172,7 @@ pipelineCmd
   .option("--strict-ownership", "Marcar como failed las olas que tocan archivos fuera de los declarados en el plan")
   .option("--worktrees", "Aislar cada tarea en su propio git worktree y aplicar el resultado como cambios staged (requiere --parallel y HEAD commiteado)")
   .option("--keep-worktrees", "Conservar los worktrees/ramas de la sesión tras el run (debug)")
+  .option("--bypass", "Ejecutar aunque el plan activo no esté aprobado (queda bajo tu responsabilidad)")
   .option("--json", "Imprimir JSON plano en stdout en lugar del resumen legible")
   .option("--skip-session", "Ignorar sesión activa (comportamiento v0.1.0)")
   .option("--harness <mode>", "Modo del arnés de seguridad (off | on | strict)", "off")
@@ -247,20 +255,20 @@ const AUTO_OPTIONS = (cmd: import("commander").Command) =>
     .option("--max-cost <usd>", "Budget máximo en USD (default: 1.0)", parseFloat)
     .option("--max-tasks <n>", "Máximo de tasks a ejecutar (default: 10)", parseInt)
     .option("--harness <mode>", "Modo del arnés de seguridad (off | on | strict)", "on")
-    .option("--dry-run", "Solo explore+snapshot+plan, sin ejecutar código")
+    .option("--dry-run", "Solo explore+snapshot+plan; deja un plan pendiente, sin ejecutar código")
     .option("--skip-learn", "No ejecutar learn al final")
-    .option("--resume", "Resumir desde el último checkpoint sin preguntar")
+    .option("--resume", "Resumir desde el plan aprobado o avisar si sigue pendiente")
     .option("--fresh", "Ignorar checkpoints y empezar de cero")
     .option("--json", "Output JSON del report final")
     .option("--debate", "Ejecutar explore y plan con dos modelos en paralelo + árbitro")
     .option("--debate-models <m1,m2>", "Par de modelos para el debate (ej. claude-opus-4-7,claude-sonnet-4-6)")
-    .option("--debate-threshold <n>", "Umbral de consenso para HITL automático (default: 0.7)", parseFloat)
+    .option("--debate-threshold <n>", "Umbral de consenso del debate (default: 0.7)", parseFloat)
     .option("--no-classify", "Saltar el clasificador automático de intención (Haiku)");
 
 AUTO_OPTIONS(
   pipelineCmd
     .command("work")
-    .description("Pipeline completo: explore → snapshot → plan → run → learn.")
+    .description("Pipeline completo: genera plan pendiente; tras aprobación reanuda run → learn.")
     .argument("<intent...>", "La intención a implementar"),
 ).action(async (intentParts: string[], opts) => {
   await autoCommand(intentParts.join(" "), buildAutoOpts(opts));
@@ -269,7 +277,7 @@ AUTO_OPTIONS(
 AUTO_OPTIONS(
   pipelineCmd
     .command("auto")
-    .description("[alias de work] Pipeline completo.")
+    .description("[alias de work] Genera plan pendiente; tras aprobación reanuda run → learn.")
     .argument("<intent...>", "La intención a implementar"),
 ).action(async (intentParts: string[], opts) => {
   await autoCommand(intentParts.join(" "), buildAutoOpts(opts));

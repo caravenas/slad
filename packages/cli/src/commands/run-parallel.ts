@@ -139,6 +139,7 @@ export function parseWorkerOutput(task: PlanTask, stdout: string, exitCode: numb
     questions: [],
     humanAnswers: {},
     followUps: [],
+    assumptions: [],
     verification: [],
     reviewerNotes: failed ? [] : ["missing-run-output-json"],
   };
