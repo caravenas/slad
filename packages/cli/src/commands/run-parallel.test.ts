@@ -10,6 +10,7 @@ import {
   buildWorkerScript,
   computeOwnershipViolations,
   isPhantomCompletion,
+  parseGitStatusPorcelainZ,
   parseWorkerOutput,
   renderStatusTable,
   runParallel,
@@ -158,10 +159,19 @@ describe("parseWorkerOutput", () => {
     assert.ok(output.summary.includes("code 3"));
   });
 
-  it("exit 0 sin JSON produce completed con nota de falta de output estructurado", () => {
+  it("exit 0 sin JSON produce failed/unverified", () => {
     const output = parseWorkerOutput(t1, "did stuff, no json", 0);
-    assert.equal(output.status, "completed");
+    assert.equal(output.status, "failed");
     assert.deepEqual(output.reviewerNotes, ["missing-run-output-json"]);
+  });
+});
+
+describe("parseGitStatusPorcelainZ", () => {
+  it("preserva espacios, comillas y rutas de destino en renames", () => {
+    const parsed = parseGitStatusPorcelainZ(
+      " M file with spaces.ts\0?? \\\"quoted\\\".ts\0R  new name.ts\0old name.ts\0",
+    );
+    assert.deepEqual([...parsed], ["file with spaces.ts", "\\\"quoted\\\".ts", "new name.ts"]);
   });
 });
 
@@ -247,7 +257,7 @@ describe("runParallel", () => {
       listChangedFiles: async () => new Set(),
       runWorker: async ({ task: t }) => {
         waveBuffer.push(t.id);
-        await new Promise((resolve) => setImmediate(resolve));
+        await new Promise<void>((resolve) => { setImmediate(resolve); });
         if (waveBuffer.length > 0) {
           executed.push([...waveBuffer].sort());
           waveBuffer = [];

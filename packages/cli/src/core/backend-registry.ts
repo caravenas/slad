@@ -227,7 +227,20 @@ function assertExplicitPathExecutable(input: string): string {
 }
 
 function stripAnsi(value: string): string {
-  return value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+  let output = "";
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.charCodeAt(index) === 27 && value[index + 1] === "[") {
+      index += 2;
+      while (index < value.length) {
+        const code = value.charCodeAt(index);
+        if (code >= 64 && code <= 126) break;
+        index += 1;
+      }
+      continue;
+    }
+    output += value[index];
+  }
+  return output;
 }
 
 function collectModelIds(value: unknown, out: Set<string>): void {
@@ -335,7 +348,7 @@ export async function discoverBackendBinaries(
     const resolution = resolveBackendBinary(provider);
     if (resolution.status !== "resolved" || !resolution.resolvedPath) continue;
 
-    let version = "unknown";
+    let version: string;
     try {
       const result = await defaultRunner(resolution.resolvedPath, ["--version"], { timeout: 800 });
       version = (result.stdout || result.stderr).trim().split(/\r?\n/)[0]?.slice(0, 80) || "unknown";

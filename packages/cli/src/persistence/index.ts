@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, readdir, rename, unlink } from "node:fs/promises";
+import { readFile, mkdir, open, readdir, rename, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
@@ -90,7 +90,15 @@ export async function writeArtifact<K extends ArtifactKind>(
   ctx: WriteContext,
 ): Promise<ArtifactRef<K>> {
   const createdAt = ctx.createdAt ?? new Date().toISOString();
-  const taskId = taskIdFor(kind, value);
+  const parsed = SCHEMAS[kind].safeParse(value);
+  if (!parsed.success) {
+    throw new ParseError(`refusing to persist invalid ${kind} artifact`, {
+      phase: "zod",
+      cause: parsed.error,
+    });
+  }
+  const validatedValue = parsed.data as ArtifactByKind[K];
+  const taskId = taskIdFor(kind, validatedValue);
 
   const envelope = {
     kind,
@@ -99,23 +107,20 @@ export async function writeArtifact<K extends ArtifactKind>(
     createdAt,
     ...(taskId ? { taskId } : {}),
     // Empty collections are dropped on write; the Zod defaults restore them on read.
-    value: stripEmptyCollections(value),
+    value: stripEmptyCollections(validatedValue),
   };
-  const content = JSON.stringify(envelope, null, 2);
 
-  const key = artifactKey(kind, value, ctx.key);
+  const key = artifactKey(kind, validatedValue, ctx.key);
   const primary = kind === "run"
-    ? await pathForRun(ctx.sessionId, (value as RunOutput).taskId)
+    ? await pathForRun(ctx.sessionId, (validatedValue as RunOutput).taskId)
     : await pathForArtifact(kind, ctx.sessionId, key);
   const filePath = existsSync(primary)
     ? kind === "run"
-      ? await timestampedPathForRun(ctx.sessionId, (value as RunOutput).taskId, createdAt)
+      ? await timestampedPathForRun(ctx.sessionId, (validatedValue as RunOutput).taskId, createdAt)
       : await timestampedPathForArtifact(kind, ctx.sessionId, createdAt, key)
     : primary;
 
-  const dir = filePath.substring(0, filePath.lastIndexOf("/"));
-  await mkdir(dir, { recursive: true });
-  await writeFile(filePath, content, "utf8");
+  await writeJsonAtomic(filePath, envelope);
 
   return { kind, path: filePath, sessionId: ctx.sessionId, ...(taskId ? { taskId } : {}), createdAt };
 }
@@ -494,8 +499,20 @@ async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> 
   // Kept out of `*.json` so listArtifacts() never picks up a temp file.
   const tmp = path.join(dir, `.${path.basename(filePath)}.${randomUUID().slice(0, 8)}.tmp`);
   try {
-    await writeFile(tmp, JSON.stringify(value, null, 2), "utf8");
+    const handle = await open(tmp, "wx");
+    try {
+      await handle.writeFile(JSON.stringify(value, null, 2), "utf8");
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
     await rename(tmp, filePath);
+    const directory = await open(dir, "r");
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
+    }
   } catch (err: any) {
     await unlink(tmp).catch(() => {});
     throw new ParseError(`cannot write artifact file: ${filePath}`, {

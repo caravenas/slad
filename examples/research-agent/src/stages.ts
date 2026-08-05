@@ -18,7 +18,7 @@ export const planStage = defineStage<ResearchInput, PlanOutput>({
   description: "Decompose the topic into concrete search queries.",
   inputSchema: ResearchInput,
   outputSchema: PlanOutput,
-  permissions: ["network"],
+  permissions: ["model:generate"],
   async run(input, ctx) {
     const plan = await ctx.model.generateObject({
       system:
@@ -41,7 +41,7 @@ export const gatherStage = defineStage<PlanOutput, GatherOutput>({
   description: "Execute each query against the search tool and collect findings.",
   inputSchema: PlanOutput,
   outputSchema: GatherOutput,
-  permissions: ["network"],
+  permissions: ["network:read"],
   async run(input, ctx) {
     const findings: SearchResult[] = [];
     for (const query of input.queries) {
@@ -62,7 +62,7 @@ export const synthesizeStage = defineStage<GatherOutput, ReportOutput>({
   description: "Synthesize the findings into a written report.",
   inputSchema: GatherOutput,
   outputSchema: ReportOutput,
-  permissions: ["network"],
+  permissions: ["model:generate"],
   async run(input, ctx) {
     const report = await ctx.model.generateText({
       system:

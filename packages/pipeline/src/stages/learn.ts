@@ -12,7 +12,7 @@ export const learnStage = defineStage<LearnInput, LearnOutput, SladServices>({
   description: "Extrae aprendizajes post-ejecución para evolución futura",
   inputSchema: z.array(RunOutput) as z.ZodType<LearnInput>,
   outputSchema: LearnOutput as z.ZodType<LearnOutput>,
-  permissions: ["read"],
+  permissions: ["workspace:read", "model:generate", "memory:write"],
   cache: { enabled: false },
 
   async run(input, ctx) {

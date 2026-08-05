@@ -36,11 +36,11 @@ export const runStage = defineStage<PlanOutput, RunStageResult, SladServices>({
   description: "Ejecuta las tareas del plan en orden topológico",
   inputSchema: PlanOutput as z.ZodType<PlanOutput>,
   outputSchema: z.array(RunOutput) as z.ZodType<RunStageResult>,
-  permissions: ["read", "write", "shell", "network"],
+  permissions: ["workspace:read", "workspace:write", "model:generate"],
   cache: { enabled: false },
 
   async run(input, ctx) {
-    const { prompts, promptGuidance, harness, workspace, onTaskStart, onTaskComplete } = ctx.services;
+    const { prompts, promptGuidance, harness, workspace, maxTasks, onTaskStart, onTaskComplete } = ctx.services;
     const baseSystem = prompts?.builderReviewer ?? DEFAULT_BUILDER_REVIEWER;
     const system = promptGuidance ? promptGuidance("run", baseSystem) : baseSystem;
 
@@ -55,6 +55,13 @@ export const runStage = defineStage<PlanOutput, RunStageResult, SladServices>({
 
       for (const t of input.tasks) {
         if (state.get(t.id) !== "pending") continue;
+        if (maxTasks !== undefined && results.length >= maxTasks) {
+          for (const [taskId, status] of state) {
+            if (status === "pending") state.set(taskId, "skipped");
+          }
+          pending = false;
+          break;
+        }
 
         const deps = t.dependsOn.map(d => state.get(d) ?? "pending");
         if (deps.some(d => d === "failed" || d === "skipped")) {

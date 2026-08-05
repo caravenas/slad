@@ -48,7 +48,21 @@ export type ToolRisk = z.infer<typeof ToolRisk>;
 export const ProviderName = z.enum(["cli"]);
 export type ProviderName = z.infer<typeof ProviderName>;
 
-export const AgentName = z.enum(["codex", "claude", "pi", "agy", "gemini", "agent"]);
+export const LaunchSpec = z.object({
+  binary: z.string().min(1),
+  args: z.array(z.string()),
+  env: z.record(z.string(), z.string()).default({}),
+  cwd: z.string().min(1),
+  promptMode: z.enum(["stdin", "arg"]),
+  stdin: z.string().optional(),
+  permissionProfile: z.enum(["read", "workspace-write", "unrestricted"]),
+  model: z.string().optional(),
+  timeoutMs: z.number().int().positive(),
+  signalPolicy: z.enum(["none", "abort-signal"]),
+});
+export type LaunchSpec = z.infer<typeof LaunchSpec>;
+
+export const AgentName = z.enum(["codex", "claude", "pi", "agy"]);
 export type AgentName = z.infer<typeof AgentName>;
 
 export const MessageRole = z.enum(["system", "user", "assistant"]);
@@ -754,6 +768,70 @@ export const RunOutput = z.object({
   decisions: z.array(DecisionRecord).default([]),
 });
 export type RunOutput = z.infer<typeof RunOutput>;
+
+export const RunManifestStatus = z.enum([
+  "starting",
+  "running",
+  "completed",
+  "partial",
+  "failed",
+  "cancelled",
+  "interrupted",
+]);
+export type RunManifestStatus = z.infer<typeof RunManifestStatus>;
+
+export const RunManifest = z.object({
+  schemaVersion: z.literal(1),
+  runId: z.string().min(1),
+  traceId: z.string().uuid(),
+  sessionId: z.string().min(1),
+  intent: z.string(),
+  command: z.enum(["auto", "run", "run-parallel"]),
+  status: RunManifestStatus,
+  plan: z.object({
+    planId: z.string().min(1).optional(),
+    hash: z.string().min(1),
+    approval: PlanApprovalStatus,
+  }).optional(),
+  backend: z.object({
+    provider: z.string().min(1),
+    agent: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+  }),
+  stages: z.array(z.object({
+    id: z.string().min(1),
+    status: z.enum(["pending", "running", "completed", "cached", "failed", "cancelled", "interrupted"]),
+    startedAt: z.string().datetime().optional(),
+    completedAt: z.string().datetime().optional(),
+    error: z.string().optional(),
+  })).default([]),
+  tasks: z.array(z.object({
+    taskId: TaskId,
+    status: z.enum(["pending", "running", "completed", "blocked", "failed", "skipped", "interrupted"]),
+    artifact: z.string().optional(),
+    worktree: z.string().optional(),
+    error: z.string().optional(),
+  })).default([]),
+  artifacts: z.array(z.object({
+    kind: z.string().min(1),
+    path: z.string().min(1),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  })).default([]),
+  limits: z.object({
+    timeoutMs: z.number().int().positive().optional(),
+    maxTasks: z.number().int().positive().optional(),
+    maxParallel: z.number().int().positive().optional(),
+    maxModelCalls: z.number().int().positive().optional(),
+    maxUsd: z.number().nonnegative().optional(),
+  }).default({}),
+  retry: z.object({ count: z.number().int().nonnegative().default(0) }).default({ count: 0 }),
+  worktrees: z.object({ enabled: z.boolean(), keep: z.boolean().default(false) }).default({ enabled: false, keep: false }),
+  startedAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  completedAt: z.string().datetime().optional(),
+  terminalReason: z.string().optional(),
+});
+export type RunManifest = z.infer<typeof RunManifest>;
 
 export const LearnOutput = z.object({
   status: z.enum(["completed", "awaiting_human"]).default("completed"),

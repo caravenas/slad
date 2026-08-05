@@ -14,7 +14,7 @@ describe("withTimeout", () => {
   });
 
   it("lanza ProviderError retryable si la promesa tarda más que el timeout", async () => {
-    const slow = new Promise<string>((resolve) => setTimeout(() => resolve("late"), 200));
+    const slow = new Promise<string>((resolve) => { setTimeout(() => resolve("late"), 200); });
     await assert.rejects(
       () => withTimeout(slow, 50, "anthropic"),
       (err: unknown) => {

@@ -23,6 +23,8 @@ Key CLI internals:
 - `packages/cli/src/core/backend-registry.ts`: supported agent backends (codex, claude, pi, agy) — binaries, args, prompt modes, model listing. New backends go here; verify a binary's non-interactive flags against the real binary before wiring them.
 - `packages/cli/src/commands/run-parallel.ts` + `dag.ts` + `worktrees.ts`: wave scheduler (pairwise-disjoint `PlanTask.files`), worker spawning (tmux window or child process, sentinel files), git worktree lifecycle. Post-task verification is git-based both ways: undeclared files touched (ownership violation) and completed claims with no git changes (phantom-completion) are flagged, or failed under `--strict-ownership`.
 - `packages/cli/src/persistence/global-memory.ts`: best-effort bridge to `~/.agents` in both directions — exports learn/evolve results to `~/.agents/{learnings,decisions}` via the global scripts, and `readProjectMemory()` reads `~/.agents/memory/projects/<repo>.md` for injection into parallel handoff prompts (disable both with `SLAD_GLOBAL_MEMORY=off`).
+- `packages/cli/src/persistence/manifest.ts`: crash-safe repo-local run manifests under `.slad-os/runs/<runId>/manifest.json`; every auto/run records a trace id, plan binding, lifecycle, tasks, and artifact hashes.
+- `slad gate`: validates external JSON with AJV 2020-12 without importing `~/.agents` internals; internal runtime contracts remain Zod schemas from `@slad/shared`.
 
 ## Rules
 

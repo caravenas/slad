@@ -131,16 +131,11 @@ function scanProviders(root: string): InventoryProvider[] {
       const name = nameMatch?.[1] ?? fileName.replace(".ts", "");
 
       const details: string[] = [];
-
-      if (false) {
-        // Obsolete CLI logic path
-      } else {
-        const sdkMatch =
-          content.match(/from\s+["'](@anthropic-ai\/sdk|openai|@google\/generative-ai|@google-cloud\/vertexai)["']/) ??
-          content.match(/import\s+\w+\s+from\s+["'](@anthropic-ai\/sdk|openai|@google\/generative-ai)["']/);
-        if (sdkMatch) {
-          details.push(`SDK: ${sdkMatch[1]}`);
-        }
+      const sdkMatch =
+        content.match(/from\s+["'](@anthropic-ai\/sdk|openai|@google\/generative-ai|@google-cloud\/vertexai)["']/) ??
+        content.match(/import\s+\w+\s+from\s+["'](@anthropic-ai\/sdk|openai|@google\/generative-ai)["']/);
+      if (sdkMatch) {
+        details.push(`SDK: ${sdkMatch[1]}`);
       }
 
       providers.push({ name, type, file: relFile, details });

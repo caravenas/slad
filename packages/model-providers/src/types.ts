@@ -9,4 +9,6 @@ export type CompletionOptions = {
   systemPrompt?: string;
   onUsage?: (inputTokens: number, outputTokens: number) => void;
   onChunk?: (text: string) => void;
+  signal?: AbortSignal;
+  timeoutMs?: number;
 };

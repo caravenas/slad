@@ -26,8 +26,9 @@ coverage/
 .DS_Store
 *.log
 
-# docs
-docs/
+# Generated or machine-local documentation state (architecture and plans are tracked)
+docs/log/
+docs/trusted-workspaces.json
 
 # wiki
 wiki/

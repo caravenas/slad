@@ -76,6 +76,7 @@ slad pipeline run --parallel --max-parallel 3
 Inside tmux, each worker opens in its own window (`slad-T1`, `slad-T2`, …) so you can watch them work; the launching pane shows a live status table.
 If a cross-agent memory entry exists for the repo (`~/.agents/memory/projects/<repo>.md`), each worker's handoff prompt includes it — context the worker's own CLI would not load by itself.
 Worker prompts, transcripts, and exit codes land under `.slad-os/sessions/<id>/tasks/<taskId>/`.
+Every `auto`, `run`, and parallel run also maintains an atomic, schema-validated manifest at `.slad-os/runs/<runId>/manifest.json`, correlated by `traceId`.
 
 ### 2. Isolated execution with git worktrees
 
@@ -141,6 +142,8 @@ Top level:
 | `slad ask <question>` | Direct answer from the backend, no pipeline |
 | `slad chat` | Conversational REPL with slash commands |
 | `slad model` | Configure default backend, binary, and model |
+| `slad gate --schema <path> --input <path>` | Validate external JSON against JSON Schema 2020-12 |
+| `slad launch-spec` | Print the canonical backend launch policy as JSON |
 | `slad stats` | Session/run/learning totals for the project |
 | `slad version` | Print version |
 
@@ -224,6 +227,7 @@ Inside a stage, `ctx.model.generateObject({ schema, system, input })` gives sche
 
 ```bash
 corepack pnpm install
+corepack pnpm lint
 corepack pnpm typecheck   # no build needed: types resolve from source
 corepack pnpm build
 corepack pnpm test

@@ -11,7 +11,7 @@ export const snapshotStage = defineStage<ExploreOutput, SnapshotOutput, SladServ
   description: "Crea una mini-spec (snapshot) a partir del análisis de exploración",
   inputSchema: ExploreOutput as z.ZodType<ExploreOutput>,
   outputSchema: SnapshotOutput as z.ZodType<SnapshotOutput>,
-  permissions: ["read"],
+  permissions: ["workspace:read", "model:generate"],
   cache: { key: (input) => `snapshot:${Buffer.from(input.intent).toString('base64')}` },
 
   async run(input, ctx) {

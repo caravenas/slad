@@ -21,6 +21,8 @@ import { chatCommand } from "./commands/chat.js";
 import { log } from "./core/logger.js";
 import { SladError } from "./core/errors.js";
 import { getFormattedCliVersion } from "./cli/version.js";
+import { gateCommand } from "./commands/gate.js";
+import { launchSpecCommand } from "./commands/launch-spec.js";
 
 loadEnv();
 
@@ -29,7 +31,7 @@ const program = new Command();
 
 program
   .name("slad")
-  .description("SLAD — Agent Construction Kit. Construí agentes, tools, stages y pipelines.")
+  .description("SLAD — Orquestador confiable de CLIs locales para planes de ingeniería.")
   .version(cliVersion)
   .addHelpText(
     "after",
@@ -61,6 +63,26 @@ program
   .description("Imprime la versión de SLAD OS.")
   .action(() => {
     process.stdout.write(`${cliVersion}\n`);
+  });
+
+program
+  .command("gate")
+  .description("Valida un archivo JSON contra un JSON Schema 2020-12 externo.")
+  .requiredOption("--schema <path>", "Ruta al archivo JSON Schema")
+  .requiredOption("--input <path>", "Ruta al JSON a validar")
+  .option("--json", "Imprimir resultado machine-readable")
+  .action(async (opts: { schema: string; input: string; json?: boolean }) => {
+    await gateCommand(opts);
+  });
+
+program
+  .command("launch-spec")
+  .description("Imprime la política canónica de lanzamiento del backend CLI configurado.")
+  .option("--workspace <path>", "Workspace absoluto (default: cwd)")
+  .option("--model <id>", "Override de modelo")
+  .option("--timeout-ms <n>", "Timeout del subprocess", (value) => Number.parseInt(value, 10))
+  .action((opts: { workspace?: string; model?: string; timeoutMs?: number }) => {
+    launchSpecCommand(opts);
   });
 
 program
@@ -111,7 +133,7 @@ pipelineCmd
   .command("explore")
   .description("Explorer Agent: analiza una intención y devuelve enfoques, riesgos y next steps.")
   .argument("<intent...>", "La intención a explorar (entre comillas o libre)")
-  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | agy)")
   .option("-p, --provider <name>", "Provider del modelo (cli)  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. sonnet, openai-codex/gpt-5.5)  [default: $CLI_MODEL / $SLAD_MODEL]")
   .option("-o, --output <path>", "Guardar el resultado como JSON en esta ruta")
@@ -128,7 +150,7 @@ pipelineCmd
   .option("-i, --input <path>", "Ruta a un explore.json (output de `slad explore --output`)")
   .option("--intent <text>", "Intención directa si no hay input previo")
   .option("--approach <name>", "Nombre (o substring) del approach a elegir del explore.json")
-  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | agy)")
   .option("-p, --provider <name>", "Provider del modelo (cli)  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. sonnet, openai-codex/gpt-5.5)  [default: $CLI_MODEL / $SLAD_MODEL]")
   .option("-o, --output <path>", "Ruta de salida del .md (default: ./snapshots/<fecha>-<slug>.md)")
@@ -141,7 +163,7 @@ pipelineCmd
   .command("plan")
   .description("Planner Agent: convierte un Snapshot en un plan pendiente de aprobación.")
   .option("-i, --input <path>", "Ruta a un snapshot.md o snapshot JSON legacy (default: último snapshot de la sesión activa)")
-  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | agy)")
   .option("-p, --provider <name>", "Provider del modelo (cli)  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. sonnet, openai-codex/gpt-5.5)  [default: $CLI_MODEL / $SLAD_MODEL]")
   .option("-o, --output <path>", "[DEPRECATED] Ignorado; los planes de sesión se guardan en <docsRoot>/log/plans/")
@@ -160,7 +182,7 @@ pipelineCmd
   .argument("[task]", "Task id a ejecutar (ej. T2). Alternativa a --task")
   .option("-i, --input <path>", "[DEPRECATED] Ignorado; run usa el plan activo de la sesión")
   .option("-t, --task <id>", "Task id a ejecutar (default: recommendedFirstTask)")
-  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | agy)")
   .option("-p, --provider <name>", "Provider del modelo (cli)  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. sonnet, openai-codex/gpt-5.5)  [default: $CLI_MODEL / $SLAD_MODEL]")
   .option("-o, --output <path>", "[DEPRECATED] Ignorado; los runs se guardan en <docsRoot>/log/runs/")
@@ -187,7 +209,7 @@ pipelineCmd
   .command("learn")
   .description("Learn Agent: captura decisiones, errores y patrones desde un run report.")
   .option("-i, --input <path>", "Ruta a un run report .md o JSON legacy (default: último run persistido)")
-  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | agy)")
   .option("-p, --provider <name>", "Provider del modelo (cli)  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. sonnet, openai-codex/gpt-5.5)  [default: $CLI_MODEL / $SLAD_MODEL]")
   .option("-o, --output <path>", "Ruta de salida (default: ./learnings/<timestamp>-<task>.md)")
@@ -200,7 +222,7 @@ pipelineCmd
 pipelineCmd
   .command("evolve")
   .description("Evolve Agent: propone actualizaciones de wiki/patrones desde artefactos recientes.")
-  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | agy)")
   .option("-p, --provider <name>", "Provider del modelo (cli)  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. sonnet, openai-codex/gpt-5.5)  [default: $CLI_MODEL / $SLAD_MODEL]")
   .option("-o, --output <path>", "Ruta de salida (default: ./evolution/<timestamp>-evolve.md)")
@@ -249,7 +271,7 @@ function buildAutoOpts(opts: {
 
 const AUTO_OPTIONS = (cmd: import("commander").Command) =>
   cmd
-    .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
+    .option("-a, --agent <name>", "Agente local (codex | claude | pi | agy)")
     .option("-p, --provider <name>", "Provider del modelo (cli)  [default: $SLAD_DEFAULT_PROVIDER]")
     .option("-m, --model <name>", "Modelo a usar")
     .option("--max-cost <usd>", "Budget máximo en USD (default: 1.0)", parseFloat)
@@ -287,7 +309,7 @@ program
   .command("ask")
   .description("Respuesta directa del modelo, sin pipeline. Ideal para preguntas rápidas.")
   .argument("<question...>", "Pregunta o consulta (en lenguaje natural)")
-  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | agy)")
   .option("-p, --provider <name>", "Provider del modelo (cli)")
   .option("-m, --model <name>", "Modelo a usar")
   .option("--save", "Guardar la respuesta como nota en la sesión activa")
@@ -298,7 +320,7 @@ program
 program
   .command("chat")
   .description("REPL conversacional: explorá, planificá y ejecutá en formato chat.")
-  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | agy)")
   .option("-p, --provider <name>", "Provider del modelo (cli)  [default: $SLAD_DEFAULT_PROVIDER]")
   .option("-m, --model <name>", "Modelo a usar (ej. sonnet, openai-codex/gpt-5.5)  [default: $CLI_MODEL / $SLAD_MODEL]")
   .action(async (opts) => {
@@ -312,7 +334,7 @@ const sessionCmd = pipelineCmd
 sessionCmd
   .command("start <intent...>")
   .description("Crea una nueva sesión y la marca como activa.")
-  .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini) — pre-selecciona sin pasar por discovery")
+  .option("-a, --agent <name>", "Agente local (codex | claude | pi | agy) — pre-selecciona sin pasar por discovery")
   .action(async (intentParts: string[], opts) => {
     await sessionStartCommand(intentParts.join(" "), opts.agent);
   });
@@ -387,7 +409,7 @@ if (!hasSubcommand && !hasRootProgramFlag) {
   // Parse --agent / --provider / --model from argv manually so they work at the root level.
   const rootChat = new Command("slad")
     .allowUnknownOption(false)
-    .option("-a, --agent <name>", "Agente local (codex | claude | pi | gemini)")
+    .option("-a, --agent <name>", "Agente local (codex | claude | pi | agy)")
     .option("-p, --provider <name>", "Provider del modelo (cli)")
     .option("-m, --model <name>", "Modelo a usar")
     .parse(process.argv);

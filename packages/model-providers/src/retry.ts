@@ -48,7 +48,7 @@ export async function retryWithBackoff<T>(
       log.debug(`retry: attempt ${attempt + 1}/${opts.maxRetries}, delay ${delayMs}ms`);
 
       if (delayMs > 0) {
-        await new Promise((r) => setTimeout(r, delayMs));
+        await new Promise<void>((resolve) => { setTimeout(resolve, delayMs); });
       }
     }
   }

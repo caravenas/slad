@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import kleur from "kleur";
 import { RunOutput, type PlanOutput, type PlanTask } from "../core/types.js";
 import { toCompactJson } from "@slad/shared";
+import { launchSpecFromEnv } from "@slad/model-providers";
 import { BUILDER_REVIEWER_SYSTEM } from "../agents/prompts.js";
 import { getNextWave, autoSkipDependents, type TaskStatus } from "./dag.js";
 import {
@@ -30,6 +31,7 @@ export interface ParallelRunOptions {
   /** Workspace root where workers run (and git is checked). */
   cwd: string;
   maxParallel: number;
+  maxTasks?: number;
   strictOwnership: boolean;
   /**
    * Isolate each task in its own git worktree branched from a session
@@ -42,6 +44,8 @@ export interface ParallelRunOptions {
   keepWorktrees?: boolean;
   /** Per-task timeout. Default: 15 minutes. */
   taskTimeoutMs?: number;
+  /** Cancels scheduling and terminates active child-process workers. */
+  signal?: AbortSignal;
   /**
    * Cross-agent project memory (~/.agents/memory/projects/<repo>.md) injected
    * into every handoff prompt. Callers resolve it via readProjectMemory().
@@ -64,6 +68,7 @@ export interface WorkerSpec {
   /** Directory the agent works in: the main repo, or the task's worktree. */
   workspace: string;
   timeoutMs: number;
+  signal?: AbortSignal;
 }
 
 export type WorkerRunner = (spec: WorkerSpec) => Promise<{
@@ -105,8 +110,8 @@ export function buildHandoffPrompt(
 
 /**
  * Extracts the last valid RunOutput JSON object from a worker's stdout.
- * Falls back to a synthetic RunOutput derived from the exit code when the
- * worker did not emit parseable structured output.
+ * Missing or malformed structured output is always an unverified failure,
+ * regardless of the worker process exit code.
  */
 export function parseWorkerOutput(task: PlanTask, stdout: string, exitCode: number): RunOutput {
   const lastClose = stdout.lastIndexOf("}");
@@ -127,13 +132,12 @@ export function parseWorkerOutput(task: PlanTask, stdout: string, exitCode: numb
     }
   }
 
-  const failed = exitCode !== 0;
   return {
     taskId: task.id,
-    status: failed ? "failed" : "completed",
-    summary: failed
+    status: "failed",
+    summary: exitCode !== 0
       ? `Worker exited with code ${exitCode} without structured output.`
-      : "Worker finished without structured output; result not verified.",
+      : "Worker exited successfully but did not produce a valid RunOutput; result is unverified.",
     changedFiles: [],
     decisions: [],
     questions: [],
@@ -141,7 +145,7 @@ export function parseWorkerOutput(task: PlanTask, stdout: string, exitCode: numb
     followUps: [],
     assumptions: [],
     verification: [],
-    reviewerNotes: failed ? [] : ["missing-run-output-json"],
+    reviewerNotes: ["missing-run-output-json"],
   };
 }
 
@@ -186,18 +190,24 @@ export function isPhantomCompletion(
   return true;
 }
 
+export function parseGitStatusPorcelainZ(stdout: string): Set<string> {
+  const entries = stdout.split("\0");
+  const files = new Set<string>();
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    if (!entry || entry.length < 4) continue;
+    const status = entry.slice(0, 2);
+    const file = entry.slice(3);
+    if (file) files.add(file);
+    if (status.includes("R") || status.includes("C")) index += 1;
+  }
+  return files;
+}
+
 async function gitChangedFiles(cwd: string): Promise<Set<string>> {
   try {
-    const { stdout } = await exec("git", ["status", "--porcelain"], { cwd });
-    const files = new Set<string>();
-    for (const line of stdout.split("\n")) {
-      if (!line.trim()) continue;
-      // porcelain: "XY path" or "XY old -> new" for renames
-      const pathPart = line.slice(3);
-      const renamed = pathPart.split(" -> ");
-      files.add((renamed[renamed.length - 1] ?? pathPart).trim());
-    }
-    return files;
+    const { stdout } = await exec("git", ["status", "--porcelain=v1", "-z"], { cwd });
+    return parseGitStatusPorcelainZ(stdout);
   } catch {
     return new Set(); // not a git repo — ownership check becomes a no-op
   }
@@ -209,29 +219,21 @@ function shq(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-/** Builds the worker shell script from the SLAD_CLI_* env set by resolveProvider. */
+/** Builds the worker shell script from the same canonical LaunchSpec as CliProvider. */
 export function buildWorkerScript(workspace: string, workerDir: string): string {
-  const binary = process.env.SLAD_CLI_BINARY?.trim() || "codex";
-  const baseArgs = (process.env.SLAD_CLI_ARGS ?? "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((arg) => (arg === "{workspace}" ? workspace : arg));
-  const promptMode = process.env.SLAD_CLI_PROMPT_MODE?.trim() || "arg";
-  const model = process.env.CLI_MODEL?.trim();
-  const modelArg = process.env.SLAD_CLI_MODEL_ARG?.trim();
-  const modelArgs = model && modelArg ? [modelArg, model] : [];
-  // arg mode: model flags first so the prompt directly follows flags like
-  // agy's --print, which consume the next token as the prompt value.
-  const args = promptMode === "stdin" ? [...baseArgs, ...modelArgs] : [...modelArgs, ...baseArgs];
-
+  const promptToken = "__SLAD_WORKER_PROMPT__";
+  const spec = launchSpecFromEnv({
+    prompt: promptToken,
+    workspace,
+    model: process.env.CLI_MODEL?.trim(),
+    permissionProfile: "workspace-write",
+  });
   const promptPath = path.join(workerDir, "prompt.txt");
   const outputPath = path.join(workerDir, "output.txt");
   const exitCodePath = path.join(workerDir, "exit-code");
-  const command = [shq(binary), ...args.map(shq)].join(" ");
-  const invocation =
-    promptMode === "stdin"
-      ? `${command} < ${shq(promptPath)}`
-      : `${command} "$(cat ${shq(promptPath)})"`;
+  const renderedArgs = spec.args.map((arg) => arg === promptToken ? `"$(cat ${shq(promptPath)})"` : shq(arg));
+  const command = [shq(spec.binary), ...renderedArgs].join(" ");
+  const invocation = spec.promptMode === "stdin" ? `${command} < ${shq(promptPath)}` : command;
 
   // The inner `echo $?` captures the agent's exit status before tee's.
   // The sentinel is moved into place only after output is fully flushed.
@@ -254,12 +256,12 @@ async function waitForSentinel(exitCodePath: string, timeoutMs: number): Promise
       const raw = fs.readFileSync(exitCodePath, "utf8").trim();
       return Number.parseInt(raw, 10) || 0;
     }
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise<void>((resolve) => { setTimeout(resolve, 500); });
   }
   return null;
 }
 
-const defaultRunWorker: WorkerRunner = async ({ task, workerDir, workspace, timeoutMs }) => {
+const defaultRunWorker: WorkerRunner = async ({ task, workerDir, workspace, timeoutMs, signal }) => {
     const scriptPath = path.join(workerDir, "worker.sh");
     const outputPath = path.join(workerDir, "output.txt");
     const exitCodePath = path.join(workerDir, "exit-code");
@@ -279,10 +281,26 @@ const defaultRunWorker: WorkerRunner = async ({ task, workerDir, workspace, time
         await exec("tmux", ["kill-window", "-t", windowName]).catch(() => undefined);
       }
     } else {
-      const child = spawn("sh", [scriptPath], { stdio: "ignore", detached: false });
-      const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
-      await new Promise<void>((resolve) => child.on("close", () => resolve()));
+      const child = spawn("sh", [scriptPath], { stdio: "ignore", detached: process.platform !== "win32" });
+      const killGroup = (childSignal: NodeJS.Signals) => {
+        if (child.pid === undefined || child.exitCode !== null) return;
+        try {
+          if (process.platform !== "win32") process.kill(-child.pid, childSignal);
+          else child.kill(childSignal);
+        } catch {
+          // Process already exited.
+        }
+      };
+      const terminate = () => {
+        killGroup("SIGTERM");
+        setTimeout(() => killGroup("SIGKILL"), 2_000).unref();
+      };
+      const timer = setTimeout(terminate, timeoutMs);
+      const onAbort = () => terminate();
+      signal?.addEventListener("abort", onAbort, { once: true });
+      await new Promise<void>((resolve) => { child.on("close", () => resolve()); });
       clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
       exitCode = fs.existsSync(exitCodePath)
         ? Number.parseInt(fs.readFileSync(exitCodePath, "utf8").trim(), 10) || 0
         : null;
@@ -344,10 +362,12 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
     sessionId,
     cwd,
     maxParallel,
+    maxTasks = 10,
     strictOwnership,
     useWorktrees = false,
     keepWorktrees = false,
     taskTimeoutMs = 15 * 60_000,
+    signal,
     projectMemory = null,
     onTaskOutput,
     print = console.log,
@@ -381,7 +401,10 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
   let waveNumber = 0;
 
   for (;;) {
-    const wave = getNextWave(plan.tasks, state, maxParallel);
+    if (signal?.aborted) break;
+    const remainingBudget = maxTasks - outputs.length;
+    if (remainingBudget <= 0) break;
+    const wave = getNextWave(plan.tasks, state, maxParallel).slice(0, remainingBudget);
     if (wave.length === 0) break;
     waveNumber++;
 
@@ -399,7 +422,7 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
       const workspace = integration
         ? await addTaskWorktree(cwd, sessionId, task.id, baseRef!)
         : cwd;
-      specs.push({ task, workerDir, workspace, timeoutMs: taskTimeoutMs });
+      specs.push({ task, workerDir, workspace, timeoutMs: taskTimeoutMs, signal });
     }
 
     const beforeWave = integration ? null : await listChangedFiles();

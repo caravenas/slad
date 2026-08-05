@@ -10,7 +10,8 @@ export interface BudgetHistoryEntry {
   provider: string;
   inputTokens: number;
   outputTokens: number;
-  estimatedCostUsd: number;
+  estimatedCostUsd?: number;
+  costStatus?: "measured" | "estimated" | "unknown";
   stagesCompleted: string[];
 }
 
@@ -55,7 +56,7 @@ export function summarizeBudgetHistory(entries: BudgetHistoryEntry[]): BudgetHis
       acc.totalRuns += 1;
       acc.totalInputTokens += e.inputTokens;
       acc.totalOutputTokens += e.outputTokens;
-      acc.totalEstimatedCostUsd += e.estimatedCostUsd;
+      if (e.estimatedCostUsd !== undefined) acc.totalEstimatedCostUsd += e.estimatedCostUsd;
       return acc;
     },
     { totalRuns: 0, totalInputTokens: 0, totalOutputTokens: 0, totalEstimatedCostUsd: 0 },

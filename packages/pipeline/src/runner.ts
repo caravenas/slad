@@ -14,6 +14,21 @@ import type {
 import { isStage } from "./stage.js";
 import { createModelAdapter, createNoopModelAdapter } from "@slad/model-providers";
 import type { ChatMessage, CompletionOptions } from "@slad/model-providers";
+import type { z } from "zod";
+
+export class StageSchemaValidationError extends Error {
+  readonly stageId: string;
+  readonly boundary: "input" | "output" | "cache";
+  readonly issues: z.ZodIssue[];
+
+  constructor(stageId: string, boundary: "input" | "output" | "cache", issues: z.ZodIssue[]) {
+    super(`Stage '${stageId}' ${boundary} failed schema validation`);
+    this.name = "StageSchemaValidationError";
+    this.stageId = stageId;
+    this.boundary = boundary;
+    this.issues = issues;
+  }
+}
 
 const noopLogger: PipelineLogger = {
   debug() {},
@@ -110,8 +125,6 @@ export async function runPipeline<Input = unknown, Output = unknown, Services ex
     const emitArtifact: StageContext<Services>["emitArtifact"] = async (name, value, metadata) => {
       const artifact = { stageId: stage.id, name, value, metadata, createdAt: now() };
       stageArtifacts.push(artifact);
-      artifacts.push(artifact);
-      await options.onArtifact?.(stage.id, artifact);
       return artifact;
     };
 
@@ -132,9 +145,13 @@ export async function runPipeline<Input = unknown, Output = unknown, Services ex
     };
 
     try {
+      for (const permission of stage.permissions ?? []) {
+        await services.harness?.assertPermission(permission);
+      }
+      current = validateBoundary(stage, "input", current, options.schemaValidation ?? "enforce", logger);
       const cacheEntry = await readCached(stage, current, ctx);
       if (cacheEntry.hit) {
-        current = cacheEntry.value;
+        current = validateBoundary(stage, "cache", cacheEntry.value, options.schemaValidation ?? "enforce", logger);
         const completedAt = now();
         const result = makeStageResult(stage.id, "cached", stageStartedAt, completedAt, startMs, current, stageArtifacts);
         stageResults.push(result);
@@ -143,20 +160,20 @@ export async function runPipeline<Input = unknown, Output = unknown, Services ex
       }
 
       const span = telemetry.startSpan(`stage.${stage.id}`, { pipelineId, runId });
-      current = await stage.run(current, ctx);
-      span.end({ status: "completed" });
-
-      if (stage.outputSchema) {
-        const validation = stage.outputSchema.safeParse(current);
-        if (!validation.success) {
-          logger.warn("Stage output schema validation failed", {
-            stageId: stage.id,
-            issues: validation.error.issues,
-          });
-        }
+      try {
+        const rawOutput = await stage.run(current, ctx);
+        current = validateBoundary(stage, "output", rawOutput, options.schemaValidation ?? "enforce", logger);
+        span.end({ status: "completed" });
+      } catch (error) {
+        span.end({ status: "failed", error: error instanceof Error ? error.message : String(error) });
+        throw error;
       }
 
       await writeCached(cacheEntry.key, stage, current, ctx);
+      for (const artifact of stageArtifacts) {
+        artifacts.push(artifact);
+        await options.onArtifact?.(stage.id, artifact);
+      }
 
       const completedAt = now();
       const result = makeStageResult(stage.id, "completed", stageStartedAt, completedAt, startMs, current, stageArtifacts);
@@ -205,6 +222,31 @@ export async function runPipeline<Input = unknown, Output = unknown, Services ex
       durationMs: new Date(completedAt).getTime() - new Date(startedAt).getTime(),
     };
   }
+}
+
+function validateBoundary(
+  stage: Stage<unknown, unknown>,
+  boundary: "input" | "output" | "cache",
+  value: unknown,
+  mode: "enforce" | "warn",
+  logger: PipelineLogger,
+): unknown {
+  const schema = boundary === "input" ? stage.inputSchema : stage.outputSchema;
+  if (!schema) return value;
+
+  const result = schema.safeParse(value);
+  if (result.success) return result.data;
+
+  if (mode === "warn") {
+    logger.warn(`Stage ${boundary} schema validation failed`, {
+      stageId: stage.id,
+      boundary,
+      issues: result.error.issues,
+    });
+    return value;
+  }
+
+  throw new StageSchemaValidationError(stage.id, boundary, result.error.issues);
 }
 
 function resolveStage<Services extends PipelineServices>(

@@ -19,6 +19,7 @@ import { askCommand } from "./ask.js";
 import { appendAgentRunLog } from "../persistence/telemetry.js";
 import { select } from "@inquirer/prompts";
 import { SnapshotOutput, type PlanOutput, type RunOutput, type SessionState } from "../core/types.js";
+import { completeRunManifest, createRunManifest, interruptStaleRunManifests, sha256File, updateRunManifest } from "../persistence/manifest.js";
 
 export interface AutoOpts {
   provider?: string;
@@ -129,12 +130,8 @@ async function readLatestCompleteStageArtifact(
 ): Promise<unknown | undefined> {
   const refs = [...session.artifacts].reverse().filter((artifact) => artifact.kind === stage);
   for (const ref of refs) {
-    try {
-      const { value } = await readArtifact(stage, ref.path);
-      if (isCompleteAutoStageOutput(stage, value)) return value;
-    } catch {
-      // Ignore stale or invalid artifacts and continue toward the last reliable state.
-    }
+    const { value } = await readArtifact(stage, ref.path);
+    if (isCompleteAutoStageOutput(stage, value)) return value;
   }
   return undefined;
 }
@@ -145,16 +142,12 @@ async function readCompleteRunOutputs(session: SessionState): Promise<RunOutput[
   const refs = [...session.artifacts].reverse().filter((artifact) => artifact.kind === "run");
 
   for (const ref of refs) {
-    try {
-      const { value } = await readArtifact("run", ref.path);
-      const values = Array.isArray(value) ? value : [value];
-      for (const output of values) {
-        if (output.status !== "completed" || seen.has(output.taskId)) continue;
-        seen.add(output.taskId);
-        outputs.push(output);
-      }
-    } catch {
-      // Invalid run artifacts are not a reliable resume point.
+    const { value } = await readArtifact("run", ref.path);
+    const values = Array.isArray(value) ? value : [value];
+    for (const output of values) {
+      if (output.status !== "completed" || seen.has(output.taskId)) continue;
+      seen.add(output.taskId);
+      outputs.push(output);
     }
   }
 
@@ -326,6 +319,27 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   const resume = await resolveAutoResume(existingSession, pipelineStages, intent);
   pipelineStages = resume.stages;
   const resumeInput = resume.input;
+  await interruptStaleRunManifests(activeSession.id);
+  const manifest = await createRunManifest({
+    sessionId: activeSession.id,
+    intent,
+    command: "auto",
+    plan: currentPlan ? {
+      planId: currentPlan.value.planId,
+      hash: currentPlan.value.approval.planHash,
+      approval: currentPlan.value.approval.status,
+    } : undefined,
+    backend: {
+      provider: providerName,
+      agent: opts.agent ?? config.defaultAgent,
+      model,
+    },
+    stages: pipelineStages.map((id) => ({ id, status: "pending" as const })),
+    tasks: currentPlan?.value.plan.tasks.map((task) => ({ taskId: task.id, status: "pending" as const })) ?? [],
+    limits: { maxTasks: opts.maxTasks ?? 10, maxUsd: opts.maxCost },
+    worktrees: { enabled: false, keep: false },
+  });
+  await updateRunManifest(manifest, { status: "running" });
   let latestSnapshot = SnapshotOutput.safeParse(resumeInput).data;
   if (resume.note) {
     spinner.text = resume.note;
@@ -339,6 +353,7 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
 
   // Inject per-task progress callbacks into pipeline services for the run stage
   Object.assign(pipeline.services as Record<string, unknown>, {
+    maxTasks: opts.maxTasks ?? 10,
     onTaskStart: (taskId: string, title: string) => {
       const text = kleur.dim(taskId) + " " + title;
       if (!spinner.isSpinning) spinner = ora(text).start();
@@ -360,9 +375,15 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   const result = await agent.run(
     resumeInput ?? { intent },
     {
-      onStageStart: (stage: string) => {
+      onStageStart: async (stage: string) => {
         if (spinner.isSpinning) spinner.stop();
         spinner = ora(kleur.dim(`${stage}...`)).start();
+        await updateRunManifest(manifest, (current) => ({
+          ...current,
+          stages: current.stages.map((item) => item.id === stage
+            ? { ...item, status: "running", startedAt: new Date().toISOString() }
+            : item),
+        }));
       },
       onArtifact: async (stage: string, artifact: unknown) => {
         const stageId = stage as SladPipelineStageId;
@@ -392,6 +413,7 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
           });
           activeSession = appendArtifact(activeSession!, "plan", written.ref.path);
           saveSession(activeSession);
+          await recordManifestArtifact("plan", written.ref.path);
           process.stdout.write(kleur.yellow("  Plan pendiente de aprobación. Ejecutá `slad pipeline plan --approve` para continuar.\n"));
         } else if (stageId === "run") {
           const outputs = Array.isArray(artifact) ? (artifact as RunOutput[]) : [artifact as RunOutput];
@@ -399,18 +421,26 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
             const ref = await writeArtifact("run", output, { sessionId: activeSession!.id });
             activeSession = appendArtifact(activeSession!, "run", ref.path, output.taskId);
             saveSession(activeSession);
+            await recordManifestArtifact("run", ref.path, output);
           }
         } else {
           const ref = await writeArtifact(stageId as any, artifact as any, { sessionId: activeSession!.id });
           activeSession = appendArtifact(activeSession!, stageId as any, ref.path);
           saveSession(activeSession);
+          await recordManifestArtifact(stageId, ref.path);
         }
 
         if (!isCompleteAutoStageOutput(stageId, artifact)) {
           throw new AutoStageIncompleteError(stageId, outputStatus(artifact));
         }
       },
-      onStageComplete: (stage: string) => {
+      onStageComplete: async (stage: string) => {
+        await updateRunManifest(manifest, (current) => ({
+          ...current,
+          stages: current.stages.map((item) => item.id === stage
+            ? { ...item, status: "completed", completedAt: new Date().toISOString() }
+            : item),
+        }));
         // Always persist the completion line, regardless of spinner state
         if (spinner.isSpinning) {
           spinner.stopAndPersist({ symbol: kleur.green("✓"), text: kleur.dim(stage) });
@@ -420,6 +450,19 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
       },
     },
   );
+
+  async function recordManifestArtifact(kind: string, artifactPath: string, output?: RunOutput): Promise<void> {
+    const sha256 = await sha256File(artifactPath);
+    await updateRunManifest(manifest, (current) => ({
+      ...current,
+      artifacts: [...current.artifacts, { kind, path: artifactPath, sha256 }],
+      tasks: output
+        ? current.tasks.map((task) => task.taskId === output.taskId
+          ? { ...task, status: output.status === "awaiting_human" ? "blocked" : output.status, artifact: artifactPath }
+          : task)
+        : current.tasks,
+    }));
+  }
 
   if (spinner.isSpinning) spinner.stop();
   if (result.status === "failed") process.stdout.write(kleur.red("✗") + " Pipeline falló\n");
@@ -431,6 +474,16 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
       log.error(`Stage '${failedStage.stageId}': ${failedStage.error.message}`);
     }
   }
+
+  await completeRunManifest(
+    manifest,
+    result.status === "completed"
+      ? manifest.value.tasks.some((task) => task.status === "pending") ? "partial" : "completed"
+      : result.status === "cancelled" ? "cancelled" : "failed",
+    result.status === "failed"
+      ? result.stages.find((stage) => stage.status === "failed")?.error?.message
+      : undefined,
+  );
 
   const outputs = Object.fromEntries(result.stages.map((s) => [s.stageId, s.output]));
   const stagesCompleted = result.stages.filter((s) => s.status === "completed").map((s) => s.stageId);
@@ -450,7 +503,7 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
     outputTokens: totalOutputTokens,
     startedAt,
     completedAt: new Date().toISOString(),
-    estimatedCostUsd: 0,
+    costStatus: "unknown",
     stagesCompleted: stagesCompleted as any,
   });
 

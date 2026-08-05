@@ -11,7 +11,7 @@ export const planStage = defineStage<SnapshotOutput, PlanOutput, SladServices>({
   description: "Crea el plan de ejecución a partir del snapshot",
   inputSchema: SnapshotOutput as z.ZodType<SnapshotOutput>,
   outputSchema: PlanOutput as z.ZodType<PlanOutput>,
-  permissions: ["read"],
+  permissions: ["workspace:read", "model:generate"],
   cache: { key: (input) => `plan:${Buffer.from(input.content).toString('base64').substring(0, 64)}` },
 
   async run(input, ctx) {

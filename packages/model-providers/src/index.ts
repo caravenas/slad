@@ -20,7 +20,8 @@ export type {
 export { ProviderError, isRetryable } from "./errors.js";
 export { retryWithBackoff } from "./retry.js";
 export { withTimeout, resolveApiTimeoutMs } from "./timeout.js";
-export { CliProvider } from "./cli.js";
+export { CliProvider, launchSpecFromEnv, runCli } from "./cli.js";
+export type { LaunchSpecOptions, RunCliOptions } from "./cli.js";
 
 export interface ToolUseOptions extends CompletionOptions {
   tools: ToolDefinition[];

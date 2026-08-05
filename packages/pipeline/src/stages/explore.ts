@@ -19,7 +19,7 @@ export const exploreStage = defineStage<ExploreInput, ExploreOutput, SladService
   description: "Analiza el intent del usuario, genera enfoques, riesgos y preguntas abiertas",
   inputSchema: ExploreInputSchema as z.ZodType<ExploreInput>,
   outputSchema: ExploreOutput as z.ZodType<ExploreOutput>,
-  permissions: ["read"],
+  permissions: ["workspace:read", "model:generate"],
   cache: { key: (input) => `explore:${Buffer.from(input.intent).toString('base64')}` },
 
   async run(input, ctx) {

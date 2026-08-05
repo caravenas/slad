@@ -31,11 +31,10 @@ export async function hitlLoop<T extends HitlAwareOutput>(
   const maxRounds = opts.maxRounds ?? 3;
   const allAnswers: Record<string, string> = {};
   let output!: T;
-  let raw = "";
   let rounds = 0;
 
   while (rounds <= maxRounds) {
-    raw = await provider.complete(messages, opts.completionOpts);
+    const raw = await provider.complete(messages, opts.completionOpts);
     opts.onRaw?.(raw);
     output = opts.parse(raw);
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { definePipeline, defineStage, runPipeline } from "./index.js";
 import type { ModelProvider } from "@slad/model-providers";
+import { z } from "zod";
 
 function makeFakeProvider(response = "ok", inputTokens = 1000, outputTokens = 500): ModelProvider {
   return {
@@ -58,6 +59,120 @@ test("runPipeline resolves string stage refs through a registry", async () => {
   const result = await runPipeline<string, string>({ ...pipeline, input: " hello " });
 
   assert.equal(result.output, "HELLO");
+});
+
+test("runPipeline denies a stage before execution when the harness rejects a declared permission", async () => {
+  let calls = 0;
+  const stage = defineStage<number, number>({
+    id: "permission-gated",
+    permissions: ["workspace:write"],
+    async run(input) {
+      calls += 1;
+      return input;
+    },
+  });
+  const harness = {
+    assertPermission: async () => { throw new Error("permission denied by test harness"); },
+  } as any;
+
+  const result = await runPipeline({ stages: [stage], input: 1, services: { harness } });
+
+  assert.equal(result.status, "failed");
+  assert.equal(calls, 0);
+  assert.match(result.stages[0]?.error?.message ?? "", /permission denied/);
+});
+
+test("runPipeline rejects invalid input before run and cache", async () => {
+  const cache = new MemoryCache();
+  let calls = 0;
+  const stage = defineStage<number, number>({
+    id: "strict-input",
+    inputSchema: z.number().int().positive(),
+    outputSchema: z.number(),
+    cache: true,
+    async run(input) {
+      calls += 1;
+      return input;
+    },
+  });
+
+  const result = await runPipeline({ stages: [stage], input: -1, cache });
+
+  assert.equal(result.status, "failed");
+  assert.equal(calls, 0);
+  assert.equal(result.stages[0]?.error?.name, "StageSchemaValidationError");
+  assert.equal((result.stages[0]?.error as Error & { boundary?: string }).boundary, "input");
+});
+
+test("runPipeline rejects invalid output without publishing artifacts or caching it", async () => {
+  const cache = new MemoryCache();
+  let published = 0;
+  const stage = defineStage<number, number>({
+    id: "strict-output",
+    inputSchema: z.coerce.number(),
+    outputSchema: z.number().int().positive(),
+    cache: true,
+    async run(input, ctx) {
+      await ctx.emitArtifact("candidate", -input);
+      return -input;
+    },
+  });
+
+  const first = await runPipeline({
+    stages: [stage],
+    input: "2",
+    cache,
+    onArtifact: () => { published += 1; },
+  });
+  const second = await runPipeline({ stages: [stage], input: "2", cache });
+
+  assert.equal(first.status, "failed");
+  assert.equal(first.artifacts.length, 0);
+  assert.equal(second.stages[0]?.status, "failed");
+  assert.equal((second.stages[0]?.error as Error & { boundary?: string }).boundary, "output");
+  assert.equal(published, 0);
+});
+
+test("runPipeline validates cache hits before completion", async () => {
+  const cache = new MemoryCache();
+  cache.set("cached:1", "corrupt");
+  const stage = defineStage<number, number>({
+    id: "cached",
+    inputSchema: z.number(),
+    outputSchema: z.number(),
+    cache: { key: (input) => `cached:${input}` },
+    async run(input) { return input; },
+  });
+
+  const result = await runPipeline({ stages: [stage], input: 1, cache });
+
+  assert.equal(result.status, "failed");
+  assert.equal((result.stages[0]?.error as Error & { boundary?: string }).boundary, "cache");
+});
+
+test("runPipeline uses parsed schema values and supports explicit warn compatibility mode", async () => {
+  let received: unknown;
+  const stage = defineStage<number, number>({
+    id: "parsed",
+    inputSchema: z.coerce.number(),
+    outputSchema: z.number(),
+    async run(input) {
+      received = input;
+      return input;
+    },
+  });
+  const warned = defineStage<string, string>({
+    id: "warned",
+    inputSchema: z.string().min(3),
+    async run(input) { return input; },
+  });
+
+  const parsed = await runPipeline({ stages: [stage], input: "4" });
+  const compatibility = await runPipeline({ stages: [warned], input: "x", schemaValidation: "warn" });
+
+  assert.equal(received, 4);
+  assert.equal(parsed.output, 4);
+  assert.equal(compatibility.status, "completed");
 });
 
 test("runPipeline uses a cache store when stage cache is enabled", async () => {

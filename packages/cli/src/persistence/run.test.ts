@@ -134,7 +134,20 @@ describe("persistence/run", () => {
     );
   });
 
-  it("8. segunda escritura del mismo run genera path timestamped", async () => {
+  it("8. writeArtifact rechaza valores inválidos antes de crear archivos", async () => {
+    await assert.rejects(
+      () => writeArtifact("run", { ...makeRunOutput(), taskId: "invalid" } as RunOutput, BASE_CTX),
+      (err: unknown) => {
+        assert.ok(err instanceof ParseError);
+        assert.equal(err.phase, "zod");
+        return true;
+      },
+    );
+    const docsRoot = path.join(tmpDir, "docs");
+    assert.equal(fs.existsSync(docsRoot), false);
+  });
+
+  it("9. segunda escritura del mismo run genera path timestamped", async () => {
     const original = makeRunOutput();
     const ref1 = await writeArtifact("run", original, BASE_CTX);
     const ref2 = await writeArtifact("run", original, BASE_CTX);
@@ -142,7 +155,7 @@ describe("persistence/run", () => {
     assert.ok(ref2.path.includes("__"), `Expected timestamped path, got: ${ref2.path}`);
   });
 
-  it("9. idempotencia: readArtifact dos veces da el mismo value", async () => {
+  it("10. idempotencia: readArtifact dos veces da el mismo value", async () => {
     const original = makeRunOutput();
     const ref = await writeArtifact("run", original, BASE_CTX);
     const first = await readArtifact("run", ref.path);

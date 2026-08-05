@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { Permission } from "@slad/shared";
 import type { CacheStore } from "@slad/cache";
 import type { ExecutionHarness } from "@slad/harness";
 import type { HITLTransport } from "@slad/hitl";
@@ -11,6 +12,7 @@ export type StageId = string;
 
 export type PipelineStatus = "completed" | "failed" | "cancelled";
 export type StageStatus = "completed" | "failed" | "skipped" | "cached";
+export type SchemaValidationMode = "enforce" | "warn";
 
 export interface PipelineLogger {
   debug(message: string, meta?: Record<string, unknown>): void;
@@ -89,7 +91,7 @@ export interface Stage<Input = unknown, Output = unknown, Services extends Pipel
   readonly description?: string;
   readonly inputSchema?: z.ZodType<Input>;
   readonly outputSchema?: z.ZodType<Output>;
-  readonly permissions?: readonly ("read" | "write" | "shell" | "network")[];
+  readonly permissions?: readonly Permission[];
   readonly cache?: boolean | StageCacheConfig<Input>;
   run(input: Input, ctx: StageContext<Services>): Promise<Output>;
 }
@@ -107,6 +109,8 @@ export interface PipelineDefinition<Services extends PipelineServices = Pipeline
   readonly cache?: CacheStore<unknown>;
   readonly signal?: AbortSignal;
   readonly policies?: PipelinePolicies;
+  /** Defaults to enforce. Warn is an explicit SDK compatibility bridge only. */
+  readonly schemaValidation?: SchemaValidationMode;
   onArtifact?(stageId: StageId, artifact: PipelineArtifact): Promise<void> | void;
   onStageStart?(event: StageStartEvent): Promise<void> | void;
   onStageComplete?(event: StageCompleteEvent): Promise<void> | void;

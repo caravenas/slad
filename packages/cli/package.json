@@ -1,7 +1,7 @@
 {
   "name": "@slad/cli",
   "version": "0.1.0",
-  "description": "SLAD OS CLI — explore intent, generate Snapshots, orchestrate agents across multiple LLM providers.",
+  "description": "SLAD CLI — orchestrate approved plans across local coding-agent CLIs.",
   "type": "module",
   "bin": {
     "slad": "./bin/slad.js"
@@ -14,11 +14,12 @@
     "package.json"
   ],
   "scripts": {
-    "build": "pnpm --filter @slad/cache --filter @slad/audit-log --filter @slad/context-budget --filter @slad/model-providers --filter @slad/hitl --filter @slad/harness --filter @slad/tools --filter @slad/pipeline build && tsc",
+    "build": "tsc",
     "bundle": "tsup",
     "dev": "tsx src/dev.ts",
     "start": "node ./bin/slad.js",
-    "typecheck": "pnpm --filter @slad/cache --filter @slad/audit-log --filter @slad/context-budget --filter @slad/model-providers --filter @slad/hitl --filter @slad/harness --filter @slad/tools --filter @slad/pipeline build && tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --max-warnings 0",
     "clean": "rm -rf dist",
     "test": "node --import tsx/esm --test 'src/**/*.test.ts'"
   },
@@ -30,8 +31,6 @@
     "agent",
     "llm",
     "claude",
-    "openai",
-    "gemini",
     "slad-os"
   ],
   "author": "Christopher Aravena",
@@ -45,6 +44,7 @@
     "@slad/pipeline": "workspace:*",
     "@slad/shared": "workspace:*",
     "@slad/tools": "workspace:*",
+    "ajv": "^8.17.1",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
     "kleur": "^4.1.5",
