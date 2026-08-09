@@ -182,6 +182,7 @@ pipelineCmd
   .option("--reject", "Rechazar el plan actual de la sesión sin generar uno nuevo")
   .option("--check", "Validar el plan actual (preflight read-only) sin aprobarlo ni ejecutarlo")
   .option("--reason <text>", "Motivo opcional al aprobar o rechazar un plan")
+  .option("--import <path>", "Importar un plan externo canónico (JSON slad.external-plan) como plan pendiente, sin invocar el modelo")
   .option("--skip-session", "Ignorar sesión activa (comportamiento v0.1.0)")
   .action(async (opts) => {
     await planCommand(opts);

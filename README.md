@@ -97,6 +97,18 @@ Both `plan --approve` and `run` first pass a plan preflight: session binding, ap
 `--bypass` skips only the missing-approval blocker; integrity blockers always stop the run.
 Each task's `files` must be literal repo-relative posix paths — globs, backslashes, absolute paths, and `..` segments are preflight blockers, because scheduling and ownership checks compare paths literally.
 
+A plan produced outside SLAD can also be imported as the session's pending plan, with no model call:
+
+```bash
+slad pipeline plan --import ./external-plan.json
+slad pipeline plan --approve
+```
+
+The file must be a strict `slad.external-plan` JSON document — `{ "kind": "slad.external-plan", "schemaVersion": 1, "intent": …, "snapshot": …, "plan": …, "source"?: … }` — whose `intent` matches the active session's intent (whitespace-trimmed).
+SLAD rebuilds the envelope on import: planId, revision, digest, approval state, and plan hash are always SLAD-owned, so external envelopes, approvals, or hashes are rejected by the schema.
+The document must pass the same plan preflight before anything is persisted; a document that fails schema, intent match, or preflight persists nothing and exits `1`.
+Importing over an existing plan supersedes it, exactly like a regenerated plan.
+
 `run --parallel` schedules waves from the task DAG: tasks whose declared `files` don't overlap run concurrently; a task that declares no files runs alone.
 Inside tmux, each worker opens in its own window (`slad-T1`, `slad-T2`, …) so you can watch them work; the launching pane shows a live status table.
 If a cross-agent memory entry exists for the repo (`~/.agents/memory/projects/<repo>.md`), each worker's handoff prompt includes it — context the worker's own CLI would not load by itself.

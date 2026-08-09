@@ -2,6 +2,8 @@ import {
   DoctorCheck,
   DoctorReport,
   DoctorStatus,
+  EXTERNAL_PLAN_KIND,
+  ExternalPlanDocument,
   PlanApprovalStatus,
   PlanArtifactEnvelope,
   RunOutput,
@@ -365,5 +367,143 @@ describe("PlanArtifactEnvelope", () => {
       RunOutput.parse({ taskId: "T1", status: "completed", summary: "Done." }).assumptions,
       [],
     );
+  });
+});
+
+describe("ExternalPlanDocument", () => {
+  const document = {
+    kind: "slad.external-plan",
+    schemaVersion: 1,
+    intent: "add sum function to math module",
+    snapshot: { content: "# Snapshot\n\nAdd sum()." },
+    plan: {
+      snapshot: "Add sum().",
+      summary: "One task.",
+      tasks: [
+        {
+          id: "T1",
+          title: "Implement sum()",
+          description: "Add sum() to src/math.ts",
+          type: "implementation",
+          priority: "high",
+          files: ["src/math.ts"],
+          acceptanceCriteria: ["sum works"],
+        },
+      ],
+      recommendedFirstTask: "T1",
+    },
+  };
+
+  it("parses a canonical external plan and applies nested defaults", () => {
+    const parsed = ExternalPlanDocument.parse(document);
+
+    assert.equal(parsed.kind, EXTERNAL_PLAN_KIND);
+    assert.equal(parsed.schemaVersion, 1);
+    assert.equal(parsed.snapshot.status, "completed");
+    assert.deepEqual(parsed.plan.tasks[0]?.dependsOn, []);
+    assert.equal(parsed.source, undefined);
+  });
+
+  it("accepts an optional source with producer and datetime createdAt", () => {
+    const parsed = ExternalPlanDocument.parse({
+      ...document,
+      source: { producer: "pi", createdAt: "2026-08-09T10:00:00.000Z" },
+    });
+
+    assert.equal(parsed.source?.producer, "pi");
+  });
+
+  it("rejects a wrong kind or schemaVersion", () => {
+    assert.equal(ExternalPlanDocument.safeParse({ ...document, kind: "plan" }).success, false);
+    assert.equal(ExternalPlanDocument.safeParse({ ...document, schemaVersion: 2 }).success, false);
+  });
+
+  it("rejects a blank intent", () => {
+    assert.equal(ExternalPlanDocument.safeParse({ ...document, intent: "" }).success, false);
+    assert.equal(ExternalPlanDocument.safeParse({ ...document, intent: "   " }).success, false);
+  });
+
+  it("rejects external envelope fields: no approval, digest or hash may enter", () => {
+    for (const extra of [
+      { approval: { status: "approved", planHash: "x" } },
+      { digest: "abc" },
+      { planHash: "abc" },
+      { planId: "external-id" },
+    ]) {
+      assert.equal(ExternalPlanDocument.safeParse({ ...document, ...extra }).success, false);
+    }
+  });
+
+  const deepDocument = {
+    ...document,
+    snapshot: {
+      content: "# Snapshot\n\nAdd sum().",
+      assumptions: ["repo builds"],
+      questions: [{ id: "q1", prompt: "Which module?", kind: "free" }],
+    },
+    plan: {
+      ...document.plan,
+      questions: [{ id: "q2", prompt: "Ship it?", kind: "confirm" }],
+      decisions: [
+        {
+          id: "d1",
+          stage: "plan",
+          decision: "Use a single task",
+          alternatives: [{ option: "split in two", rejectedBecause: "overkill" }],
+          evidence: [{ kind: "snapshot", ref: "snap-1" }],
+          reversibility: "trivial",
+        },
+      ],
+    },
+    source: { producer: "pi" },
+  };
+
+  it("parses a document with nested questions and decisions, applying defaults", () => {
+    const parsed = ExternalPlanDocument.parse(deepDocument);
+
+    assert.equal(parsed.snapshot.questions[0]?.blocking, true);
+    assert.equal(parsed.plan.decisions[0]?.rationale, "");
+    assert.deepEqual(parsed.plan.decisions[0]?.supersedes, []);
+  });
+
+  it("rejects unknown fields at every nested depth", () => {
+    const mutations: Array<{ path: string; mutate: (doc: any) => void }> = [
+      { path: "snapshot", mutate: (doc) => { doc.snapshot.digest = "abc"; } },
+      { path: "snapshot.questions.0", mutate: (doc) => { doc.snapshot.questions[0].planHash = "abc"; } },
+      { path: "plan", mutate: (doc) => { doc.plan.approval = { status: "approved", planHash: "abc" }; } },
+      { path: "plan.tasks.0", mutate: (doc) => { doc.plan.tasks[0].planHash = "abc"; } },
+      { path: "plan.questions.0", mutate: (doc) => { doc.plan.questions[0].digest = "abc"; } },
+      { path: "plan.decisions.0", mutate: (doc) => { doc.plan.decisions[0].approval = "approved"; } },
+      { path: "plan.decisions.0.alternatives.0", mutate: (doc) => { doc.plan.decisions[0].alternatives[0].digest = "abc"; } },
+      { path: "plan.decisions.0.evidence.0", mutate: (doc) => { doc.plan.decisions[0].evidence[0].planHash = "abc"; } },
+    ];
+
+    for (const { path, mutate } of mutations) {
+      const doc = JSON.parse(JSON.stringify(deepDocument));
+      mutate(doc);
+      const result = ExternalPlanDocument.safeParse(doc);
+      assert.equal(result.success, false, `unknown field under ${path} must be rejected`);
+      const issues = result.success ? [] : result.error.issues;
+      assert.ok(
+        issues.some((issue) => issue.path.join(".") === path),
+        `issue must point at ${path}`,
+      );
+    }
+  });
+
+  it("rejects unknown keys inside source", () => {
+    const result = ExternalPlanDocument.safeParse({
+      ...document,
+      source: { producer: "pi", planHash: "abc" },
+    });
+    assert.equal(result.success, false);
+  });
+
+  it("rejects a non-datetime source.createdAt", () => {
+    const result = ExternalPlanDocument.safeParse({
+      ...document,
+      source: { producer: "pi", createdAt: "yesterday" },
+    });
+    assert.equal(result.success, false);
   });
 });

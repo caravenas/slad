@@ -36,6 +36,7 @@ import {
   gatePlanPreflight,
   printPlanPreflight,
 } from "../core/plan-preflight.js";
+import { importExternalPlanFromFile } from "../core/plan-import.js";
 
 export interface PlanOpts {
   input?: string;
@@ -49,6 +50,7 @@ export interface PlanOpts {
   reject?: boolean;
   check?: boolean;
   reason?: string;
+  import?: string;
 }
 
 function extractJson(raw: string): string {
@@ -212,7 +214,83 @@ export async function generatePlanOutput(options: {
   return { ...result, userContent };
 }
 
+// Imports a canonical external plan (slad.external-plan) as the session's
+// pending plan. Never invokes a provider/LLM; a document that fails schema,
+// intent match or preflight is not persisted.
+async function importPlanCommand(opts: PlanOpts): Promise<void> {
+  if (opts.check || opts.approve || opts.reject) {
+    log.error("--import no puede combinarse con --check, --approve ni --reject.");
+    process.exitCode = 1;
+    return;
+  }
+  if (opts.skipSession) {
+    log.error("--import requiere la sesión activa; no puede combinarse con --skip-session.");
+    process.exitCode = 1;
+    return;
+  }
+
+  const session = getActiveSession();
+  if (!session) {
+    log.error("--import requiere una sesión activa cuya intención coincida con el plan externo.");
+    process.exitCode = 1;
+    return;
+  }
+
+  const filePath = path.resolve(opts.import!);
+  const result = await importExternalPlanFromFile(filePath, {
+    id: session.id,
+    intent: session.intent,
+  });
+
+  if (!result.ok) {
+    if (result.error.code === "preflight") printPlanPreflight(result.error.gate);
+    log.error(result.error.message);
+    if (result.error.code === "schema") {
+      for (const issue of result.error.issues) log.dim(`  ${issue}`);
+    }
+    process.exitCode = 1;
+    return;
+  }
+
+  printPlanPreflight(result.gate);
+
+  try {
+    const written = await writePendingPlan({
+      sessionId: session.id,
+      intent: session.intent,
+      snapshot: result.document.snapshot,
+      plan: result.document.plan,
+    });
+    saveSession(appendArtifact(session, "plan", written.ref.path));
+
+    if (opts.json) {
+      console.log(JSON.stringify({
+        planPath: written.ref.path,
+        planId: written.value.planId,
+        revision: written.value.revision,
+        approval: written.value.approval.status,
+        ...(written.supersededPath ? { supersededPath: written.supersededPath } : {}),
+      }, null, 2));
+      return;
+    }
+
+    if (written.supersededPath) {
+      log.warn(`El plan anterior de la sesión quedó superseded: ${written.supersededPath}`);
+    }
+    log.success(`Plan externo importado, pendiente de aprobación: ${written.ref.path}`);
+    log.dim("  aprobalo con `slad pipeline plan --approve` antes de ejecutar run.");
+  } catch (err) {
+    log.error(`No se pudo persistir el plan importado: ${(err as Error).message}`);
+    process.exitCode = 1;
+  }
+}
+
 export async function planCommand(opts: PlanOpts): Promise<void> {
+  if (opts.import) {
+    await importPlanCommand(opts);
+    return;
+  }
+
   if (opts.approve || opts.reject || opts.check) {
     const selected = [opts.check, opts.approve, opts.reject].filter(Boolean);
     if (selected.length > 1) {

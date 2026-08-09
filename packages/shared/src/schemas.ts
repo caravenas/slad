@@ -249,6 +249,59 @@ export const PlanArtifactEnvelope = z.object({
 });
 export type PlanArtifactEnvelope = z.infer<typeof PlanArtifactEnvelope>;
 
+// ─── External plan import ────────────────────────────────────────────────────
+// Canonical no-LLM plan import contract: an external producer supplies intent,
+// snapshot and plan; SLAD always rebuilds the envelope on import, so it owns
+// planId/revision/digest/approval/planHash. External envelopes or hashes are
+// rejected by the strict shapes (unknown keys fail parsing at every depth).
+export const EXTERNAL_PLAN_KIND = "slad.external-plan" as const;
+export const EXTERNAL_PLAN_SCHEMA_VERSION = 1 as const;
+
+export const ExternalPlanSource = z.object({
+  producer: z.string().min(1),
+  createdAt: z.string().datetime().optional(),
+}).strict();
+export type ExternalPlanSource = z.infer<typeof ExternalPlanSource>;
+
+// Strict mirrors of the nested output schemas, used only by the external plan
+// contract: unknown fields at any depth must fail parsing, while the internal
+// schemas keep their lenient behavior. They are derived from the base schemas
+// (never redefined) so the shapes — and the inferred types — cannot drift.
+const ExternalQuestion = Question.strict();
+
+const ExternalSnapshotOutput = SnapshotOutput.extend({
+  questions: z.array(ExternalQuestion).default([]),
+}).strict();
+
+const ExternalPlanTask = PlanTask.strict();
+
+const ExternalDecisionRecord = DecisionRecord.extend({
+  alternatives: z
+    .array(DecisionRecord.shape.alternatives.removeDefault().element.strict())
+    .default([]),
+  evidence: z
+    .array(DecisionRecord.shape.evidence.removeDefault().element.strict())
+    .default([]),
+}).strict();
+
+const ExternalPlanOutput = PlanOutput.extend({
+  tasks: z.array(ExternalPlanTask).default([]),
+  questions: z.array(ExternalQuestion).default([]),
+  decisions: z.array(ExternalDecisionRecord).default([]),
+}).strict();
+
+export const ExternalPlanDocument = z.object({
+  kind: z.literal(EXTERNAL_PLAN_KIND),
+  schemaVersion: z.literal(EXTERNAL_PLAN_SCHEMA_VERSION),
+  intent: z.string().refine((value) => value.trim().length > 0, {
+    message: "intent must not be blank",
+  }),
+  snapshot: ExternalSnapshotOutput,
+  plan: ExternalPlanOutput,
+  source: ExternalPlanSource.optional(),
+}).strict();
+export type ExternalPlanDocument = z.infer<typeof ExternalPlanDocument>;
+
 export const RoutingMode = z.enum(["ask", "work", "work-debate"]);
 export type RoutingMode = z.infer<typeof RoutingMode>;
 

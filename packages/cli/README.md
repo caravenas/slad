@@ -33,7 +33,7 @@ Comandos del inventario actual:
 - `evolve` - `src/commands/evolve.ts` - output: `EvolveOutput`
 - `explore` - `src/commands/explore.ts` - output: `ExploreOutput`
 - `learn` - `src/commands/learn.ts` - output: `LearnOutput`
-- `plan` - `src/commands/plan.ts` - output: `PlanOutput`; use `--approve` or `--reject` for the active plan, `--check` for a read-only preflight
+- `plan` - `src/commands/plan.ts` - output: `PlanOutput`; use `--approve` or `--reject` for the active plan, `--check` for a read-only preflight, `--import <path>` to import an external `slad.external-plan` JSON without invoking the model
 - `run` - `src/commands/run.ts` - output: `RunOutput`
 - `session` - `src/commands/session.ts` - subcomandos: `start` crea una sesión nueva y la activa; `resume` reanuda la sesión activa o la indicada; además `list`, `use`, `show`
 - `snapshot` - `src/commands/snapshot.ts` - output: `SnapshotOutput`
@@ -150,8 +150,14 @@ slad pipeline snapshot --intent "definir estrategia de cache" --provider cli
 
 ```bash
 slad pipeline plan --input ./docs/log/snapshots/<sessionId>.json --provider cli
+slad pipeline plan --import ./external-plan.json   # plan externo canónico, sin LLM
 slad pipeline plan --approve
 ```
+
+`--import` lee un documento JSON estricto `{ kind: "slad.external-plan", schemaVersion: 1, intent, snapshot, plan, source? }`.
+Requiere sesión activa con la misma intención (comparación con trim) y no puede combinarse con `--check`, `--approve`, `--reject` ni `--skip-session`.
+SLAD reconstruye el envelope al importar (planId/revision/digest/approval/planHash propios); el documento pasa el mismo preflight y, si falla, no se persiste nada.
+El plan importado queda `pending` y puede superseder al plan previo de la sesión.
 
 `run`:
 
