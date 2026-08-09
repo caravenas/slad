@@ -434,6 +434,31 @@ function makeRepo(): string {
   return cwd;
 }
 
+describe("runParallel — workspace compartido con git real", () => {
+  it("strict ownership acepta un archivo declarado dentro de un directorio nuevo", async () => {
+    const cwd = makeRepo();
+    const result = await runParallel({
+      plan: plan([task("T1", ["newdir/file.txt"])]),
+      sessionId: "sh1",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: true,
+      print: () => undefined,
+      runWorker: async ({ task: t, workspace }) => {
+        fs.mkdirSync(path.join(workspace, "newdir"), { recursive: true });
+        fs.writeFileSync(path.join(workspace, "newdir", "file.txt"), `${t.id} ok\n`);
+        return { exitCode: 0, stdout: workerJson(t.id) };
+      },
+    });
+
+    assert.equal(result.status, "completed");
+    // Sin -uall, git colapsa el directorio nuevo en "newdir/": falso
+    // ownership-violation y falsa phantom-completion.
+    assert.deepEqual(result.outputs[0]!.reviewerNotes, []);
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+});
+
 describe("runParallel — worktrees", () => {
   /** Worker that writes its owned files inside its (isolated) workspace. */
   function writingWorker(observed: Record<string, string[]>) {
@@ -506,6 +531,32 @@ describe("runParallel — worktrees", () => {
     assert.ok(result.outputs[0]!.reviewerNotes.some((n) => n.includes("rogue.txt")));
     assert.ok(!fs.existsSync(path.join(cwd, "a.txt")), "el trabajo infractor no debe integrarse");
     assert.ok(!fs.existsSync(path.join(cwd, "rogue.txt")));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("strict ownership acepta archivos declarados bajo un directorio nuevo y los integra", async () => {
+    const cwd = makeRepo();
+    const result = await runParallel({
+      plan: plan([task("T1", ["newdir/file.txt"])]),
+      sessionId: "wt7",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: true,
+      useWorktrees: true,
+      print: () => undefined,
+      runWorker: (async ({ task: t, workspace }: { task: PlanTask; workspace: string }) => {
+        fs.mkdirSync(path.join(workspace, "newdir"), { recursive: true });
+        fs.writeFileSync(path.join(workspace, "newdir", "file.txt"), `${t.id} ok\n`);
+        return { exitCode: 0, stdout: workerJson(t.id) };
+      }) as never,
+    });
+
+    assert.equal(result.status, "completed");
+    assert.deepEqual(result.outputs[0]!.reviewerNotes, []);
+    assert.deepEqual(result.outputs[0]!.changedFiles, ["newdir/file.txt"]);
+    // El squash dejó el archivo staged en el worktree principal.
+    assert.equal(fs.readFileSync(path.join(cwd, "newdir", "file.txt"), "utf8"), "T1 ok\n");
+    assert.deepEqual(git(cwd, "diff", "--cached", "--name-only").split("\n"), ["newdir/file.txt"]);
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 
@@ -616,6 +667,17 @@ describe("worktrees — helpers", () => {
     const result = await commitTaskWork(cwd, "T1", "primer path");
     assert.equal(result.committed, true);
     assert.deepEqual([...result.changedFiles].sort(), ["README.md", "new file.txt"]);
+    assert.equal(git(cwd, "status", "--porcelain"), "");
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("commitTaskWork reporta rutas completas de archivos bajo un directorio nuevo", async () => {
+    const cwd = makeRepo();
+    fs.mkdirSync(path.join(cwd, "newdir"));
+    fs.writeFileSync(path.join(cwd, "newdir", "file.txt"), "x\n");
+    const result = await commitTaskWork(cwd, "T1", "dir nuevo");
+    assert.equal(result.committed, true);
+    assert.deepEqual(result.changedFiles, ["newdir/file.txt"]);
     assert.equal(git(cwd, "status", "--porcelain"), "");
     fs.rmSync(cwd, { recursive: true, force: true });
   });

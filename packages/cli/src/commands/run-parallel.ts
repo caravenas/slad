@@ -195,7 +195,10 @@ export function isPhantomCompletion(
 
 async function gitChangedFiles(cwd: string): Promise<Set<string>> {
   try {
-    const { stdout } = await exec("git", ["status", "--porcelain=v1", "-z"], { cwd });
+    // -uall lists individual files inside untracked directories; without it a
+    // declared file under a new directory shows up as "dir/" and strict
+    // ownership flags it as a false violation.
+    const { stdout } = await exec("git", ["status", "--porcelain=v1", "-z", "-uall"], { cwd });
     return parseGitStatusPorcelainZ(stdout);
   } catch {
     return new Set(); // not a git repo — ownership check becomes a no-op

@@ -135,7 +135,10 @@ export async function commitTaskWork(
 ): Promise<TaskCommitResult> {
   // Raw exec (not the trimming git() helper): the status prefix of the first
   // entry may start with a space, and trimming it shifts the path offset.
-  const { stdout } = await execP("git", ["-C", worktreeDir, "status", "--porcelain=v1", "-z"]);
+  // -uall lists individual files inside untracked directories; without it a
+  // declared file under a new directory is reported as "dir/" and per-task
+  // ownership attribution flags it as a false violation.
+  const { stdout } = await execP("git", ["-C", worktreeDir, "status", "--porcelain=v1", "-z", "-uall"]);
   const changedFiles = [...parseGitStatusPorcelainZ(stdout)];
   if (changedFiles.length === 0) return { committed: false, changedFiles: [] };
 
