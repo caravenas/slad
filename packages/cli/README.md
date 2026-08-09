@@ -167,7 +167,8 @@ slad pipeline run --parallel --bypass   # override explícito si necesitás ejec
 ```
 
 `--worktrees` requiere `--parallel`, un HEAD commiteado y un worktree principal limpio; cambios sin commitear abortan el run antes de lanzar workers.
-Si el squash final no puede aplicarse, el run falla y el resultado integrado queda en la rama de integración de la sesión (`slad/<sessionId>/...`), con los worktrees conservados para recuperación manual.
+El run termina `review_pending`: el resultado integrado queda en la rama de integración de la sesión (`slad/<sessionId>/...`) y el worktree principal no se toca.
+Usá `slad pipeline run --review <runId>` para inspeccionar, `--apply <runId>` para dejar un único squash staged, `--abort <runId>` para limpiar la integración, o `--from-review <runId>` para continuar desde ese tip.
 
 Tests (`node:test`):
 

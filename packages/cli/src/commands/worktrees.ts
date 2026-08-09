@@ -10,9 +10,11 @@ const execP = promisify(execFile);
  *
  * Each task runs in its own worktree branched from a session integration
  * branch; successful tasks are committed and merged sequentially into the
- * integration branch, and at the end the integration branch is squashed
- * into the main worktree WITHOUT committing — the user reviews and commits,
- * exactly like a shared-worktree run.
+ * integration branch. The run ends there (review_pending): the main worktree
+ * is never touched until an explicit `run --apply <runId>` squashes the
+ * integration branch as staged, uncommitted changes, or `run --abort <runId>`
+ * discards it. A `run --from-review <runId>` follow-up continues the same
+ * integration branch from its tip.
  */
 
 // Transient commits on slad/* branches; identity is fixed so runs never
@@ -98,12 +100,26 @@ export async function removeSessionWorktrees(cwd: string, sessionId: string): Pr
   }
 }
 
-export async function setupIntegration(cwd: string, sessionId: string): Promise<IntegrationSetup> {
+/**
+ * Creates the session integration worktree/branch at `fromRef` (default HEAD).
+ * A --from-review follow-up passes the previous run's integration tip so the
+ * new run continues on top of the not-yet-applied result.
+ */
+export async function setupIntegration(
+  cwd: string,
+  sessionId: string,
+  fromRef?: string,
+): Promise<IntegrationSetup> {
+  // Resolve before cleanup: removeSessionWorktrees deletes slad/* branches,
+  // so a fromRef naming one must be pinned to a sha first.
+  const baseRef = await git(cwd, "rev-parse", "--verify", `${fromRef ?? "HEAD"}^{commit}`).catch(() => {
+    throw new Error(`La ref base de integración no existe en este repo: ${fromRef ?? "HEAD"}`);
+  });
   await removeSessionWorktrees(cwd, sessionId);
   const integrationBranch = sessionBranch(sessionId, "integration");
   const integrationDir = path.join(sessionWorktreesRoot(cwd, sessionId), "_integration");
-  await git(cwd, "worktree", "add", "-B", integrationBranch, integrationDir, "HEAD");
-  return { integrationBranch, integrationDir, baseRef: await git(cwd, "rev-parse", "HEAD") };
+  await git(cwd, "worktree", "add", "-B", integrationBranch, integrationDir, baseRef);
+  return { integrationBranch, integrationDir, baseRef };
 }
 
 /** Current tip of the integration branch — the base for the next wave's worktrees. */
@@ -168,24 +184,60 @@ export async function mergeTaskBranch(
   }
 }
 
+/** Current sha of a local branch, or null if it no longer exists. */
+export async function branchTip(cwd: string, branch: string): Promise<string | null> {
+  return git(cwd, "rev-parse", "--verify", `refs/heads/${branch}`).catch(() => null);
+}
+
+export interface ApplyIntegrationOptions {
+  branch: string;
+  /** Main worktree HEAD recorded when the review chain started. */
+  baseRef: string;
+  /** Integration tip recorded in the run manifest. */
+  expectedTip: string;
+}
+
 /**
- * Applies the integration branch onto the main worktree as staged,
- * uncommitted changes (`merge --squash`). Returns an error message on
- * failure; the integration branch is preserved for manual recovery.
+ * Applies a reviewed integration branch onto the main worktree as staged,
+ * uncommitted changes (`merge --squash`). Returns an error message when any
+ * guard fails; nothing is touched in that case.
  */
-export async function squashIntoMain(cwd: string, setup: IntegrationSetup): Promise<string | null> {
-  const tip = await integrationTip(setup);
-  if (tip === setup.baseRef) return null; // nothing merged — nothing to apply
-  // The main worktree was clean when the run started; anything here now
-  // appeared mid-run (user edits, a rogue worker) and a squash on top of it
-  // would mix that work with the session's result.
+export async function applyIntegrationBranch(
+  cwd: string,
+  { branch, baseRef, expectedTip }: ApplyIntegrationOptions,
+): Promise<string | null> {
+  const tip = await branchTip(cwd, branch);
+  if (!tip) return `la rama de integración ${branch} ya no existe`;
+  if (tip !== expectedTip) {
+    return `la rama ${branch} se movió desde el run (tip ${tip.slice(0, 12)} ≠ manifest ${expectedTip.slice(0, 12)})`;
+  }
+  const head = await git(cwd, "rev-parse", "HEAD");
+  if (head !== baseRef) {
+    return `el worktree principal se movió desde el run (HEAD ${head.slice(0, 12)} ≠ base ${baseRef.slice(0, 12)}); el squash asumía esa base`;
+  }
+  // A squash on top of uncommitted changes would mix that work with the
+  // session's result.
   if (await hasUncommittedChanges(cwd)) {
-    return "el worktree principal tiene cambios sin commitear que aparecieron durante el run";
+    return "el worktree principal tiene cambios sin commitear; commitea o stashea antes de aplicar";
   }
   try {
-    await git(cwd, "merge", "--squash", setup.integrationBranch);
+    await git(cwd, "merge", "--squash", branch);
     return null;
   } catch (err) {
+    await git(cwd, "reset", "--hard", "HEAD").catch(() => undefined);
     return (err as Error).message.slice(0, 400);
   }
+}
+
+/** Human-readable summary of a pending integration range for `run --review`. */
+export async function describeIntegration(
+  cwd: string,
+  baseRef: string,
+  tip: string,
+): Promise<{ commits: string; diffStat: string }> {
+  const range = `${baseRef}..${tip}`;
+  return {
+    commits: await git(cwd, "log", "--oneline", range).catch(() => "(rango no disponible en este repo)"),
+    diffStat: await git(cwd, "diff", "--stat", baseRef, tip).catch(() => "(diff no disponible)"),
+  };
 }

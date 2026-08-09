@@ -878,13 +878,32 @@ export type RunOutput = z.infer<typeof RunOutput>;
 export const RunManifestStatus = z.enum([
   "starting",
   "running",
+  // Worktree run finished; the merged result waits on the integration branch
+  // for an explicit `run --apply` / `run --abort` / `run --from-review`.
+  "review_pending",
   "completed",
   "partial",
   "failed",
   "cancelled",
+  "applied",
+  "aborted",
   "interrupted",
 ]);
 export type RunManifestStatus = z.infer<typeof RunManifestStatus>;
+
+/**
+ * Review-before-apply metadata for a worktree run. `baseRef` is the main
+ * worktree HEAD the whole review chain started from (apply guard); `tip` is
+ * the integration branch commit recorded when the run ended.
+ */
+export const RunManifestIntegration = z.object({
+  branch: z.string().min(1),
+  baseRef: z.string().min(1),
+  tip: z.string().min(1),
+  /** Parent run this follow-up continued from (`run --from-review <runId>`). */
+  fromRun: z.string().min(1).optional(),
+});
+export type RunManifestIntegration = z.infer<typeof RunManifestIntegration>;
 
 export const RunManifest = z.object({
   schemaVersion: z.literal(1),
@@ -931,7 +950,11 @@ export const RunManifest = z.object({
     maxUsd: z.number().nonnegative().optional(),
   }).default({}),
   retry: z.object({ count: z.number().int().nonnegative().default(0) }).default({ count: 0 }),
-  worktrees: z.object({ enabled: z.boolean(), keep: z.boolean().default(false) }).default({ enabled: false, keep: false }),
+  worktrees: z.object({
+    enabled: z.boolean(),
+    keep: z.boolean().default(false),
+    integration: RunManifestIntegration.optional(),
+  }).default({ enabled: false, keep: false }),
   startedAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   completedAt: z.string().datetime().optional(),

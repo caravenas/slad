@@ -6,6 +6,8 @@ import {
   ExternalPlanDocument,
   PlanApprovalStatus,
   PlanArtifactEnvelope,
+  RunManifest,
+  RunManifestStatus,
   RunOutput,
   SLASH_COMMAND_CATALOG,
   SlashCommand,
@@ -505,5 +507,67 @@ describe("ExternalPlanDocument", () => {
       source: { producer: "pi", createdAt: "yesterday" },
     });
     assert.equal(result.success, false);
+  });
+});
+
+describe("RunManifest — review before apply", () => {
+  const SHA_A = "a".repeat(40);
+  const SHA_B = "b".repeat(40);
+  const baseManifest = {
+    schemaVersion: 1,
+    runId: "run_x",
+    traceId: "3f0e6f14-9c1d-4b06-9a53-0e6a1c2d3e4f",
+    sessionId: "s1",
+    intent: "test",
+    command: "run-parallel",
+    status: "review_pending",
+    backend: { provider: "cli" },
+    startedAt: "2026-08-09T10:00:00.000Z",
+    updatedAt: "2026-08-09T10:00:00.000Z",
+  };
+
+  it("accepts the review-before-apply statuses", () => {
+    assert.equal(RunManifestStatus.parse("review_pending"), "review_pending");
+    assert.equal(RunManifestStatus.parse("applied"), "applied");
+    assert.equal(RunManifestStatus.parse("aborted"), "aborted");
+  });
+
+  it("parses integration metadata with follow-up linkage", () => {
+    const parsed = RunManifest.parse({
+      ...baseManifest,
+      worktrees: {
+        enabled: true,
+        integration: {
+          branch: "slad/s1/integration",
+          baseRef: SHA_A,
+          tip: SHA_B,
+          fromRun: "run_parent",
+        },
+      },
+    });
+    assert.equal(parsed.status, "review_pending");
+    assert.equal(parsed.worktrees.integration?.tip, SHA_B);
+    assert.equal(parsed.worktrees.integration?.fromRun, "run_parent");
+  });
+
+  it("keeps integration optional and defaults worktrees when absent", () => {
+    const parsed = RunManifest.parse({ ...baseManifest, status: "completed" });
+    assert.deepEqual(parsed.worktrees, { enabled: false, keep: false });
+  });
+
+  it("rejects integration metadata missing its branch or refs", () => {
+    for (const missing of ["branch", "baseRef", "tip"] as const) {
+      const integration: Record<string, string> = {
+        branch: "slad/s1/integration",
+        baseRef: SHA_A,
+        tip: SHA_B,
+      };
+      delete integration[missing];
+      const result = RunManifest.safeParse({
+        ...baseManifest,
+        worktrees: { enabled: true, integration },
+      });
+      assert.equal(result.success, false, `integration.${missing} must be required`);
+    }
   });
 });

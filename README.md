@@ -119,14 +119,18 @@ Every `auto`, `run`, and parallel run also maintains an atomic, schema-validated
 
 ```bash
 slad pipeline run --parallel --worktrees
+slad pipeline run --review <runId>
+slad pipeline run --apply <runId>
 git diff --cached   # review the combined result, then commit yourself
 ```
 
 Each task runs in its own git worktree branched from a session integration branch (`slad/<sessionId>/…`).
 Successful tasks are committed in their worktree and merged sequentially — dependent tasks branch from the updated tip, so they see earlier waves' work.
-At the end the result is squashed into your main worktree as staged, uncommitted changes; your branch gets no commits.
+At the end the result stays on the session integration branch and the run manifest is marked `review_pending`; your main worktree is not touched.
+Use `slad pipeline run --review <runId>` to inspect it, `--apply <runId>` to squash it into the main worktree as staged, uncommitted changes, or `--abort <runId>` to discard the integration branch without touching main.
+Use `slad pipeline run --parallel --worktrees --from-review <runId>` to run a follow-up plan from the pending integration tip.
 Worktree mode requires `--parallel`, a committed HEAD, and a clean main worktree — uncommitted changes abort the run before any worker starts.
-If the final squash cannot be applied (for example, uncommitted changes appeared mid-run), the run fails and the merged result stays on the session integration branch, with worktrees kept for manual recovery.
+`--apply` only proceeds when the main worktree is still clean, its HEAD still matches the recorded base, and the integration branch still matches the recorded tip.
 Add `--keep-worktrees` to always keep the session worktrees for inspection.
 
 ### 4. Enforce the plan's file ownership
@@ -206,8 +210,12 @@ Key flags for `run` / `run --parallel`:
 ```
 --bypass              execute even if the active plan is not approved
 --max-parallel <n>    max concurrent workers (default: 3)
---worktrees           per-task git worktrees + sequential merge + final squash (requires --parallel and a clean tree)
+--worktrees           per-task git worktrees + sequential merge to a review_pending integration branch
 --keep-worktrees      keep session worktrees/branches for debugging
+--review <runId>      inspect a review_pending worktree run without changing files
+--apply <runId>       squash a review_pending run as staged changes on a clean unchanged main HEAD
+--abort <runId>       delete a review_pending run's integration refs without touching main
+--from-review <runId> continue from a review_pending integration tip (requires --parallel --worktrees)
 --strict-ownership    fail tasks that touch undeclared files
 --agent <name>        backend: claude | codex | pi | agy
 -m, --model <id>      model passed to the backend

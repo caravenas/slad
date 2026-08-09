@@ -231,6 +231,20 @@ describe("preflight wiring in approve/run commands", () => {
     assert.equal(fs.existsSync(path.join(dir, ".slad-os", "runs")), false);
   });
 
+  it("run rejects review actions combined with execution flags before creating any manifest", async () => {
+    await runCommand({ review: "run_x", parallel: true });
+
+    assert.equal(process.exitCode, 1);
+    assert.equal(fs.existsSync(path.join(dir, ".slad-os", "runs")), false);
+  });
+
+  it("run rejects --from-review without worktree parallel mode before creating any manifest", async () => {
+    await runCommand({ fromReview: "run_x", parallel: true });
+
+    assert.equal(process.exitCode, 1);
+    assert.equal(fs.existsSync(path.join(dir, ".slad-os", "runs")), false);
+  });
+
   it("run with --bypass still refuses a tampered plan and creates no manifest", async () => {
     const planPath = await seedSessionWithPendingPlan();
     tamperIntent(planPath);

@@ -19,6 +19,11 @@ export interface RunManifestHandle {
   value: RunManifestValue;
 }
 
+/** Repo-local path of a run's manifest, whether or not it exists yet. */
+export function runManifestPath(runId: string, cwd: string = process.cwd()): string {
+  return path.join(cwd, ".slad-os", "runs", runId, "manifest.json");
+}
+
 export async function createRunManifest(
   input: CreateRunManifestInput,
   cwd: string = process.cwd(),
@@ -38,7 +43,7 @@ export async function createRunManifest(
     startedAt: now,
     updatedAt: now,
   });
-  const manifestPath = path.join(cwd, ".slad-os", "runs", runId, "manifest.json");
+  const manifestPath = runManifestPath(runId, cwd);
   await writeManifestAtomic(manifestPath, value);
   return { path: manifestPath, value };
 }
@@ -56,7 +61,7 @@ export async function updateRunManifest(
 
 export async function completeRunManifest(
   handle: RunManifestHandle,
-  status: Extract<RunManifestValue["status"], "completed" | "partial" | "failed" | "cancelled">,
+  status: Extract<RunManifestValue["status"], "completed" | "partial" | "failed" | "cancelled" | "applied" | "aborted">,
   terminalReason?: string,
 ): Promise<RunManifestHandle> {
   const completedAt = new Date().toISOString();

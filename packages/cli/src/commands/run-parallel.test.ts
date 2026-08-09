@@ -15,7 +15,7 @@ import {
   renderStatusTable,
   runParallel,
 } from "./run-parallel.js";
-import { commitTaskWork, removeSessionWorktrees } from "./worktrees.js";
+import { applyIntegrationBranch, commitTaskWork, removeSessionWorktrees } from "./worktrees.js";
 
 function task(id: string, files: string[], dependsOn: string[] = []): PlanTask {
   return {
@@ -471,7 +471,7 @@ describe("runParallel — worktrees", () => {
     };
   }
 
-  it("aísla tareas, propaga olas previas y aplica squash sin commitear", async () => {
+  it("aísla tareas, propaga olas previas y termina review_pending sin tocar main", async () => {
     const cwd = makeRepo();
     const headBefore = git(cwd, "rev-parse", "HEAD");
     const observed: Record<string, string[]> = {};
@@ -496,16 +496,31 @@ describe("runParallel — worktrees", () => {
     assert.deepEqual(observed["T1"], [".gitignore", "README.md"]);
     // Propagation: T3's worktree (wave 2) contains wave 1 results.
     assert.deepEqual(observed["T3"], [".gitignore", "README.md", "a.txt", "b.txt"]);
-    // Squash: files landed in the main worktree, staged, without new commits.
+    // No squash: the main worktree stays clean at the same HEAD.
     assert.equal(git(cwd, "rev-parse", "HEAD"), headBefore);
-    assert.equal(fs.readFileSync(path.join(cwd, "a.txt"), "utf8"), "T1 wrote a.txt\n");
-    const staged = git(cwd, "diff", "--cached", "--name-only").split("\n").sort();
-    assert.deepEqual(staged, ["a.txt", "b.txt", "c.txt"]);
+    assert.equal(git(cwd, "status", "--porcelain"), "");
+    assert.ok(!fs.existsSync(path.join(cwd, "a.txt")));
+    // Review metadata: the merged result waits on the integration branch.
+    assert.ok(result.integration);
+    assert.equal(result.integration.branch, "slad/wt1/integration");
+    assert.equal(result.integration.baseRef, headBefore);
+    assert.equal(git(cwd, "rev-parse", result.integration.branch), result.integration.tip);
+    assert.equal(git(cwd, "show", `${result.integration.tip}:a.txt`), "T1 wrote a.txt");
     // changedFiles attributed per task from its commit.
     assert.deepEqual(result.outputs.find((o) => o.taskId === "T3")!.changedFiles, ["c.txt"]);
-    // Cleanup: only the main worktree remains, no slad branches.
-    assert.equal(git(cwd, "worktree", "list").split("\n").length, 1);
-    assert.equal(git(cwd, "for-each-ref", "refs/heads/slad/", "--format=%(refname)"), "");
+    // Worktrees and branches survive for --apply / --abort.
+    assert.ok(git(cwd, "worktree", "list").split("\n").length > 1);
+    assert.ok(git(cwd, "for-each-ref", "refs/heads/slad/wt1/", "--format=%(refname)").includes("integration"));
+
+    // Apply: the whole result lands staged in the main worktree, no commits.
+    assert.equal(await applyIntegrationBranch(cwd, {
+      branch: result.integration.branch,
+      baseRef: result.integration.baseRef,
+      expectedTip: result.integration.tip,
+    }), null);
+    assert.equal(git(cwd, "rev-parse", "HEAD"), headBefore);
+    const staged = git(cwd, "diff", "--cached", "--name-only").split("\n").sort();
+    assert.deepEqual(staged, ["a.txt", "b.txt", "c.txt"]);
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 
@@ -531,6 +546,10 @@ describe("runParallel — worktrees", () => {
     assert.ok(result.outputs[0]!.reviewerNotes.some((n) => n.includes("rogue.txt")));
     assert.ok(!fs.existsSync(path.join(cwd, "a.txt")), "el trabajo infractor no debe integrarse");
     assert.ok(!fs.existsSync(path.join(cwd, "rogue.txt")));
+    // Nothing merged, nothing to review: session worktrees/branches are cleaned.
+    assert.equal(result.integration, undefined);
+    assert.equal(git(cwd, "worktree", "list").split("\n").length, 1);
+    assert.equal(git(cwd, "for-each-ref", "refs/heads/slad/", "--format=%(refname)"), "");
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 
@@ -554,9 +573,11 @@ describe("runParallel — worktrees", () => {
     assert.equal(result.status, "completed");
     assert.deepEqual(result.outputs[0]!.reviewerNotes, []);
     assert.deepEqual(result.outputs[0]!.changedFiles, ["newdir/file.txt"]);
-    // El squash dejó el archivo staged en el worktree principal.
-    assert.equal(fs.readFileSync(path.join(cwd, "newdir", "file.txt"), "utf8"), "T1 ok\n");
-    assert.deepEqual(git(cwd, "diff", "--cached", "--name-only").split("\n"), ["newdir/file.txt"]);
+    // El resultado espera en la rama de integración; main sigue limpio.
+    assert.ok(result.integration);
+    assert.equal(git(cwd, "show", `${result.integration.tip}:newdir/file.txt`), "T1 ok");
+    assert.ok(!fs.existsSync(path.join(cwd, "newdir")));
+    assert.equal(git(cwd, "status", "--porcelain"), "");
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 
@@ -575,8 +596,11 @@ describe("runParallel — worktrees", () => {
     });
 
     assert.equal(result.status, "completed");
+    assert.equal(result.integration, undefined);
     assert.equal(git(cwd, "rev-parse", "HEAD"), headBefore);
     assert.equal(git(cwd, "status", "--porcelain"), "");
+    assert.equal(git(cwd, "worktree", "list").split("\n").length, 1);
+    assert.equal(git(cwd, "for-each-ref", "refs/heads/slad/", "--format=%(refname)"), "");
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 
@@ -589,16 +613,20 @@ describe("runParallel — worktrees", () => {
       maxParallel: 3,
       strictOwnership: false,
       useWorktrees: true,
-      keepWorktrees: true, // leave leftovers on purpose
       print: () => undefined,
       runWorker: writingWorker({}) as never,
     };
-    assert.equal((await runParallel(opts)).status, "completed");
-    // Reset the staged squash so the second run starts clean.
-    git(cwd, "reset", "-q", "--hard", "HEAD");
-    const second = await runParallel({ ...opts, keepWorktrees: false });
+    // First run leaves its review-pending worktrees and branches behind.
+    const first = await runParallel(opts);
+    assert.equal(first.status, "completed");
+    assert.ok(first.integration);
+    // A rerun starts from a fresh integration branch off HEAD.
+    const second = await runParallel(opts);
     assert.equal(second.status, "completed");
-    assert.equal(fs.readFileSync(path.join(cwd, "a.txt"), "utf8"), "T1 wrote a.txt\n");
+    assert.ok(second.integration);
+    assert.equal(second.integration.baseRef, git(cwd, "rev-parse", "HEAD"));
+    assert.equal(git(cwd, "show", `${second.integration.tip}:a.txt`), "T1 wrote a.txt");
+    assert.equal(git(cwd, "status", "--porcelain"), "");
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 
@@ -624,9 +652,8 @@ describe("runParallel — worktrees", () => {
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 
-  it("aborta el squash si el worktree principal se ensució durante el run", async () => {
+  it("una edición del usuario a mitad del run no bloquea el run pero sí un apply posterior", async () => {
     const cwd = makeRepo();
-    const lines: string[] = [];
     const result = await runParallel({
       plan: plan([task("T1", ["a.txt"])]),
       sessionId: "wt6",
@@ -634,7 +661,7 @@ describe("runParallel — worktrees", () => {
       maxParallel: 3,
       strictOwnership: false,
       useWorktrees: true,
-      print: (line) => { lines.push(line); },
+      print: () => undefined,
       runWorker: (async ({ task: t, workspace }: { task: PlanTask; workspace: string }) => {
         fs.writeFileSync(path.join(workspace, "a.txt"), "ok\n");
         // Simula una edición del usuario en el worktree principal a mitad del run.
@@ -643,16 +670,110 @@ describe("runParallel — worktrees", () => {
       }) as never,
     });
 
-    // El squash no llegó al worktree principal: el run falla aunque las tareas
-    // hayan completado, y sus outputs se preservan para diagnóstico.
-    assert.equal(result.status, "failed");
-    assert.equal(result.outputs[0]!.status, "completed");
-    assert.ok(lines.some((line) => line.includes("No se pudo aplicar")));
-    // La edición manual queda intacta y el resultado no se mezcló encima.
+    // El run nunca toca main: termina review_pending con la edición intacta.
+    assert.equal(result.status, "completed");
+    assert.ok(result.integration);
     assert.equal(fs.readFileSync(path.join(cwd, "user-edit.txt"), "utf8"), "manual\n");
     assert.ok(!fs.existsSync(path.join(cwd, "a.txt")));
-    // La rama de integración sobrevive para recuperación manual.
-    assert.ok(git(cwd, "for-each-ref", "refs/heads/slad/wt6/", "--format=%(refname)").includes("integration"));
+
+    // El apply rechaza el worktree sucio sin tocar nada.
+    const dirtyError = await applyIntegrationBranch(cwd, {
+      branch: result.integration.branch,
+      baseRef: result.integration.baseRef,
+      expectedTip: result.integration.tip,
+    });
+    assert.ok(dirtyError?.includes("sin commitear"));
+    assert.ok(!fs.existsSync(path.join(cwd, "a.txt")));
+
+    // Limpio de nuevo, el apply procede y deja el resultado staged.
+    fs.rmSync(path.join(cwd, "user-edit.txt"));
+    assert.equal(await applyIntegrationBranch(cwd, {
+      branch: result.integration.branch,
+      baseRef: result.integration.baseRef,
+      expectedTip: result.integration.tip,
+    }), null);
+    assert.deepEqual(git(cwd, "diff", "--cached", "--name-only").split("\n"), ["a.txt"]);
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("--from-review: el follow-up parte del tip de integración y se aplica una sola vez", async () => {
+    const cwd = makeRepo();
+    const headBefore = git(cwd, "rev-parse", "HEAD");
+    const observed: Record<string, string[]> = {};
+
+    const first = await runParallel({
+      plan: plan([task("T1", ["a.txt"])]),
+      sessionId: "wt8",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: false,
+      useWorktrees: true,
+      print: () => undefined,
+      runWorker: writingWorker(observed) as never,
+    });
+    assert.ok(first.integration);
+
+    const second = await runParallel({
+      plan: plan([task("T2", ["b.txt"])]),
+      sessionId: "wt8",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: false,
+      useWorktrees: true,
+      fromIntegration: { ref: first.integration.tip, baseRef: first.integration.baseRef },
+      print: () => undefined,
+      runWorker: writingWorker(observed) as never,
+    });
+
+    // El worker del follow-up ve el resultado del run anterior en su worktree.
+    assert.deepEqual(observed["T2"], [".gitignore", "README.md", "a.txt"]);
+    // La base de review sigue siendo el HEAD original, no el tip intermedio.
+    assert.ok(second.integration);
+    assert.equal(second.integration.baseRef, headBefore);
+    // Un solo apply deja staged el trabajo de ambos runs.
+    assert.equal(await applyIntegrationBranch(cwd, {
+      branch: second.integration.branch,
+      baseRef: second.integration.baseRef,
+      expectedTip: second.integration.tip,
+    }), null);
+    assert.equal(git(cwd, "rev-parse", "HEAD"), headBefore);
+    assert.deepEqual(git(cwd, "diff", "--cached", "--name-only").split("\n").sort(), ["a.txt", "b.txt"]);
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("--from-review: un follow-up sin merges sigue pendiente de review con el tip anterior", async () => {
+    const cwd = makeRepo();
+    const observed: Record<string, string[]> = {};
+    const first = await runParallel({
+      plan: plan([task("T1", ["a.txt"])]),
+      sessionId: "wt9",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: false,
+      useWorktrees: true,
+      print: () => undefined,
+      runWorker: writingWorker(observed) as never,
+    });
+    assert.ok(first.integration);
+
+    // Follow-up cuyo worker no escribe nada: no hay merge nuevo, pero el
+    // trabajo del run anterior sigue sin aplicarse y debe seguir en review.
+    const second = await runParallel({
+      plan: plan([task("T2", ["b.txt"])]),
+      sessionId: "wt9",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: false,
+      useWorktrees: true,
+      fromIntegration: { ref: first.integration.tip, baseRef: first.integration.baseRef },
+      print: () => undefined,
+      runWorker: (async ({ task: t }: { task: PlanTask }) => ({ exitCode: 0, stdout: workerJson(t.id) })) as never,
+    });
+
+    assert.ok(second.integration);
+    assert.equal(second.integration.tip, first.integration.tip);
+    assert.equal(second.integration.baseRef, first.integration.baseRef);
+    assert.ok(git(cwd, "for-each-ref", "refs/heads/slad/wt9/", "--format=%(refname)").includes("integration"));
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 });
@@ -688,6 +809,70 @@ describe("worktrees — helpers", () => {
     const result = await commitTaskWork(cwd, "T1", "noop");
     assert.deepEqual(result, { committed: false, changedFiles: [] });
     assert.equal(git(cwd, "rev-parse", "HEAD"), head);
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("applyIntegrationBranch rechaza un HEAD movido, un tip inesperado y una rama ausente", async () => {
+    const cwd = makeRepo();
+    const result = await runParallel({
+      plan: plan([task("T1", ["a.txt"])]),
+      sessionId: "wtA",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: false,
+      useWorktrees: true,
+      print: () => undefined,
+      runWorker: (async ({ task: t, workspace }: { task: PlanTask; workspace: string }) => {
+        fs.writeFileSync(path.join(workspace, "a.txt"), "ok\n");
+        return { exitCode: 0, stdout: workerJson(t.id) };
+      }) as never,
+    });
+    assert.ok(result.integration);
+    const { branch, baseRef, tip } = result.integration;
+
+    // Tip registrado ≠ tip real de la rama.
+    const wrongTip = await applyIntegrationBranch(cwd, { branch, baseRef, expectedTip: baseRef });
+    assert.ok(wrongTip?.includes("se movió desde el run"));
+
+    // HEAD del worktree principal avanzó desde el run.
+    fs.writeFileSync(path.join(cwd, "other.txt"), "x\n");
+    git(cwd, "add", "-A");
+    git(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "user moved main");
+    const movedHead = await applyIntegrationBranch(cwd, { branch, baseRef, expectedTip: tip });
+    assert.ok(movedHead?.includes("worktree principal se movió"));
+    assert.ok(!fs.existsSync(path.join(cwd, "a.txt")), "un apply rechazado no toca main");
+
+    // Rama inexistente.
+    const missing = await applyIntegrationBranch(cwd, { branch: "slad/wtA/nope", baseRef, expectedTip: tip });
+    assert.ok(missing?.includes("ya no existe"));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("abort (removeSessionWorktrees) limpia ramas y worktrees sin tocar main", async () => {
+    const cwd = makeRepo();
+    const headBefore = git(cwd, "rev-parse", "HEAD");
+    const result = await runParallel({
+      plan: plan([task("T1", ["a.txt"])]),
+      sessionId: "wtB",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: false,
+      useWorktrees: true,
+      print: () => undefined,
+      runWorker: (async ({ task: t, workspace }: { task: PlanTask; workspace: string }) => {
+        fs.writeFileSync(path.join(workspace, "a.txt"), "ok\n");
+        return { exitCode: 0, stdout: workerJson(t.id) };
+      }) as never,
+    });
+    assert.ok(result.integration);
+
+    await removeSessionWorktrees(cwd, "wtB");
+
+    assert.equal(git(cwd, "rev-parse", "HEAD"), headBefore);
+    assert.equal(git(cwd, "status", "--porcelain"), "");
+    assert.ok(!fs.existsSync(path.join(cwd, "a.txt")));
+    assert.equal(git(cwd, "worktree", "list").split("\n").length, 1);
+    assert.equal(git(cwd, "for-each-ref", "refs/heads/slad/", "--format=%(refname)"), "");
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 

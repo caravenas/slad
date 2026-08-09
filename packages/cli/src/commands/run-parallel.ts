@@ -18,7 +18,6 @@ import {
   parseGitStatusPorcelainZ,
   removeSessionWorktrees,
   setupIntegration,
-  squashIntoMain,
   type IntegrationSetup,
 } from "./worktrees.js";
 
@@ -38,13 +37,21 @@ export interface ParallelRunOptions {
   strictOwnership: boolean;
   /**
    * Isolate each task in its own git worktree branched from a session
-   * integration branch, merge results sequentially, and squash the final
-   * state into the main worktree without committing. Requires a committed
-   * HEAD; enables per-task (instead of per-wave) ownership attribution.
+   * integration branch and merge results sequentially. The main worktree is
+   * never touched: when anything was merged the run ends review-pending, with
+   * worktrees and branches preserved for `run --apply` / `run --abort`.
+   * Requires a committed HEAD; enables per-task ownership attribution.
    */
   useWorktrees?: boolean;
-  /** Keep the session worktrees/branches after the run (debugging). */
+  /** Keep the session worktrees/branches even when nothing was merged (debugging). */
   keepWorktrees?: boolean;
+  /**
+   * Continue a previous run's not-yet-applied integration (`--from-review`):
+   * task worktrees branch from `ref` (the previous integration tip) and the
+   * review base stays at `baseRef` (the main worktree HEAD the chain started
+   * from), so a later apply squashes the whole chain exactly once.
+   */
+  fromIntegration?: { ref: string; baseRef: string };
   /** Per-task timeout. Default: 15 minutes. */
   taskTimeoutMs?: number;
   /** Cancels scheduling and terminates active child-process workers. */
@@ -82,6 +89,12 @@ export type WorkerRunner = (spec: WorkerSpec) => Promise<{
 export interface ParallelRunResult {
   status: "completed" | "partial" | "failed";
   outputs: RunOutput[];
+  /**
+   * Worktree mode only, and only when the integration branch holds merged
+   * work: the pending review range. The caller records it in the manifest and
+   * the run stays unapplied until `run --apply` / `run --abort`.
+   */
+  integration?: { branch: string; baseRef: string; tip: string };
 }
 
 // ─── Handoff prompt ───────────────────────────────────────────────────────────
@@ -383,11 +396,14 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
     if (await hasUncommittedChanges(cwd)) {
       throw new Error(
         "El modo --worktrees requiere un worktree principal limpio: los workers parten de HEAD " +
-        "y el squash final se aplica sobre él. Haz commit o stash de tus cambios y reintenta.",
+        "y el apply posterior asume esa base. Haz commit o stash de tus cambios y reintenta.",
       );
     }
-    integration = await setupIntegration(cwd, sessionId);
+    integration = await setupIntegration(cwd, sessionId, options.fromIntegration?.ref);
   }
+  // The apply guard base: for a --from-review follow-up it stays at the
+  // original main HEAD, so the whole chain squashes exactly once.
+  const reviewBaseRef = options.fromIntegration?.baseRef ?? integration?.baseRef ?? null;
 
   const tasksRoot = path.join(cwd, ".slad-os", "sessions", sessionId, "tasks");
   const state = new Map<string, TaskStatus>(plan.tasks.map((task) => [task.id, "pending"]));
@@ -493,28 +509,32 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
     print(renderStatusTable(plan.tasks, state, waveByTask));
   }
 
-  if (integration) {
-    const squashError = await squashIntoMain(cwd, integration);
-    if (squashError) {
-      print(kleur.red(
-        `⚠ No se pudo aplicar el resultado al worktree principal: ${squashError}\n` +
-        `  Los cambios integrados quedan en la rama ${integration.integrationBranch}.`,
-      ));
-      // The main worktree never received the result: the run failed even if
-      // every task completed. Worktrees/branches are kept for manual recovery.
-      return { status: "failed", outputs };
-    } else if (keepWorktrees) {
-      print(kleur.dim(`  worktrees conservados en .slad-os/sessions/${sessionId}/worktrees/`));
-    } else {
-      await removeSessionWorktrees(cwd, sessionId);
-    }
-  }
-
   const statuses = [...state.values()];
   const status = statuses.every((taskStatus) => taskStatus === "done")
     ? "completed"
     : statuses.some((taskStatus) => taskStatus === "done")
       ? "partial"
       : "failed";
+
+  if (integration) {
+    const tip = await integrationTip(integration);
+    if (tip === reviewBaseRef) {
+      // Nothing pending review (no task merged anything in the whole chain).
+      if (keepWorktrees) {
+        print(kleur.dim(`  worktrees conservados en .slad-os/sessions/${sessionId}/worktrees/`));
+      } else {
+        await removeSessionWorktrees(cwd, sessionId);
+      }
+      return { status, outputs };
+    }
+    // Review before apply: the main worktree stays untouched and the session
+    // worktrees/branches survive until `run --apply` or `run --abort`.
+    return {
+      status,
+      outputs,
+      integration: { branch: integration.integrationBranch, baseRef: reviewBaseRef!, tip },
+    };
+  }
+
   return { status, outputs };
 }
