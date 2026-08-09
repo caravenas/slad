@@ -10,7 +10,7 @@ import { createHarness } from "@slad/harness";
 import { loadHarnessConfig } from "@slad/harness";
 import { getActiveAgent } from "../agents/registry.js";
 import { writeArtifact, readArtifact, writePendingPlan } from "../persistence/index.js";
-import { getOrCreateSession, getActiveSession, appendArtifact, readSessionPlan, saveSession } from "../core/session.js";
+import { createSession, getActiveSession, appendArtifact, readSessionPlan, saveSession } from "../core/session.js";
 import { appendBudgetHistory } from "@slad/pipeline";
 import { getDocsRoot } from "../persistence/layout.js";
 import { ProviderError } from "../core/errors.js";
@@ -18,8 +18,9 @@ import { classifyIntent } from "../core/classifier.js";
 import { askCommand } from "./ask.js";
 import { appendAgentRunLog } from "../persistence/telemetry.js";
 import { select } from "@inquirer/prompts";
-import { SnapshotOutput, type PlanOutput, type RunOutput, type SessionState } from "../core/types.js";
+import { PlanOutput, SnapshotOutput, type PlanArtifactEnvelope, type RunOutput, type SessionState } from "../core/types.js";
 import { completeRunManifest, createRunManifest, interruptStaleRunManifests, sha256File, updateRunManifest } from "../persistence/manifest.js";
+import { gatePlanPreflight, type PlanPreflightIssue } from "../core/plan-preflight.js";
 
 export interface AutoOpts {
   provider?: string;
@@ -95,6 +96,29 @@ export function planPendingRunTasks(plan: PlanOutput, outputs: readonly RunOutpu
   };
 }
 
+export function autoIntentMatchesSession(intent: string, session: SessionState): boolean {
+  return session.intent.trim() === intent.trim();
+}
+
+export function manifestPlanFromEnvelope(envelope: PlanArtifactEnvelope): {
+  planId: string;
+  hash: string;
+  approval: PlanArtifactEnvelope["approval"]["status"];
+} {
+  return {
+    planId: envelope.planId,
+    hash: envelope.approval.planHash,
+    approval: envelope.approval.status,
+  };
+}
+
+export function manifestTasksFromPlan(
+  plan: PlanOutput,
+  status: "pending" | "skipped" = "pending",
+): { taskId: string; status: "pending" | "skipped" }[] {
+  return plan.tasks.map((task) => ({ taskId: task.id, status }));
+}
+
 function isRecord(value: unknown): value is AutoStageOutput & Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -122,6 +146,13 @@ function outputStatus(output: unknown): string {
     return statuses.length ? statuses.join(",") : "empty";
   }
   return isRecord(output) ? String(output.status ?? "unknown") : "unknown";
+}
+
+function logPreflightBlockers(blockers: readonly PlanPreflightIssue[]): void {
+  for (const blocker of blockers) {
+    const task = blocker.taskId ? ` ${blocker.taskId}` : "";
+    log.error(`  ${blocker.code}${task}: ${blocker.message}`);
+  }
 }
 
 async function readLatestCompleteStageArtifact(
@@ -202,6 +233,24 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   if (!intent || intent.trim().length < 3) {
     log.error('Intención vacía. Uso: slad auto "<tu intención>"');
     process.exit(1);
+  }
+
+  // --resume must fail before resolving providers or creating a manifest:
+  // without an active session (or a persisted plan) there is nothing to resume.
+  if (opts.resume) {
+    const resumableSession = opts.fresh ? null : getActiveSession();
+    if (!resumableSession) {
+      log.error("--resume requiere una sesión activa; no hay nada que retomar.");
+      log.dim('  Corré `slad pipeline auto "…"` sin --resume para iniciar una sesión nueva.');
+      process.exitCode = 1;
+      return;
+    }
+    if (!(await readSessionPlan(resumableSession))) {
+      log.error("--resume requiere un plan persistido en la sesión activa; no hay nada que retomar.");
+      log.dim('  Corré `slad pipeline auto "…"` sin --resume para generar y aprobar un plan.');
+      process.exitCode = 1;
+      return;
+    }
   }
 
   const startMs = Date.now();
@@ -303,13 +352,46 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
     (stage): stage is SladPipelineStageId => stage !== "evolve" && !dropStages.has(stage as SladPipelineStageId),
   );
   let existingSession = opts.fresh ? null : getActiveSession();
-  let activeSession = existingSession ?? getOrCreateSession(intent);
+  if (existingSession && !autoIntentMatchesSession(intent, existingSession)) {
+    if (spinner.isSpinning) spinner.stop();
+    log.error("La intención no coincide con la sesión activa; auto no mezclará planes de sesiones distintas.");
+    log.dim(`  sesión: ${existingSession.intent}`);
+    log.dim(`  comando: ${intent}`);
+    log.dim("  Usá `--resume` con la misma intención, o `--fresh` para crear una sesión nueva.");
+    process.exitCode = 1;
+    return;
+  }
+
+  let activeSession = opts.fresh ? createSession(intent) : existingSession ?? createSession(intent);
   const currentPlan = existingSession ? await readSessionPlan(existingSession) : null;
+  if (currentPlan && currentPlan.value.approval.status === "approved" && !opts.resume) {
+    if (spinner.isSpinning) spinner.stop();
+    log.error("La sesión activa ya tiene un plan aprobado; auto no lo continuará sin --resume.");
+    log.dim("  Usá `slad pipeline auto --resume \"…\"` para ejecutar el plan aprobado, o `--fresh` para empezar otro.");
+    process.exitCode = 1;
+    return;
+  }
+
   if (currentPlan && currentPlan.value.approval.status !== "approved") {
     if (spinner.isSpinning) spinner.stop();
     log.error(`El plan actual está ${currentPlan.value.approval.status}; auto no lo regenerará ni ejecutará.`);
     log.dim("  Revisalo y ejecutá `slad pipeline plan --approve`; luego usá `slad pipeline auto --resume \"…\"`.");
+    process.exitCode = 1;
     return;
+  }
+
+  if (currentPlan) {
+    const preflight = gatePlanPreflight(currentPlan.value, "run", {
+      expectedSession: { id: activeSession.id, intent: activeSession.intent },
+      staleApproval: currentPlan.staleApproval,
+    });
+    if (!preflight.ok) {
+      if (spinner.isSpinning) spinner.stop();
+      log.error("El plan aprobado no pasa preflight; no se puede reanudar.");
+      logPreflightBlockers(preflight.blockers);
+      process.exitCode = 1;
+      return;
+    }
   }
 
   if (!currentPlan) {
@@ -319,23 +401,20 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
   const resume = await resolveAutoResume(existingSession, pipelineStages, intent);
   pipelineStages = resume.stages;
   const resumeInput = resume.input;
+  const resumedPlan = pipelineStages.includes("run") ? PlanOutput.parse(resumeInput) : undefined;
   await interruptStaleRunManifests(activeSession.id);
   const manifest = await createRunManifest({
     sessionId: activeSession.id,
-    intent,
+    intent: activeSession.intent,
     command: "auto",
-    plan: currentPlan ? {
-      planId: currentPlan.value.planId,
-      hash: currentPlan.value.approval.planHash,
-      approval: currentPlan.value.approval.status,
-    } : undefined,
+    plan: currentPlan ? manifestPlanFromEnvelope(currentPlan.value) : undefined,
     backend: {
       provider: providerName,
       agent: opts.agent ?? config.defaultAgent,
       model,
     },
     stages: pipelineStages.map((id) => ({ id, status: "pending" as const })),
-    tasks: currentPlan?.value.plan.tasks.map((task) => ({ taskId: task.id, status: "pending" as const })) ?? [],
+    tasks: resumedPlan ? manifestTasksFromPlan(resumedPlan) : [],
     limits: { maxTasks: opts.maxTasks ?? 10, maxUsd: opts.maxCost },
     worktrees: { enabled: false, keep: false },
   });
@@ -413,6 +492,11 @@ export async function autoCommand(intent: string, opts: AutoOpts): Promise<void>
           });
           activeSession = appendArtifact(activeSession!, "plan", written.ref.path);
           saveSession(activeSession);
+          await updateRunManifest(manifest, (current) => ({
+            ...current,
+            plan: manifestPlanFromEnvelope(written.value),
+            tasks: manifestTasksFromPlan(written.value.plan, pipelineStages.includes("run") ? "pending" : "skipped"),
+          }));
           await recordManifestArtifact("plan", written.ref.path);
           process.stdout.write(kleur.yellow("  Plan pendiente de aprobación. Ejecutá `slad pipeline plan --approve` para continuar.\n"));
         } else if (stageId === "run") {

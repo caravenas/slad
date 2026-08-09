@@ -14,7 +14,7 @@ import {
 import { listSupportedBackends, type CliBackendDefinition } from "./backend-registry.js";
 
 const defaultExecFile = promisify(execFile);
-const DEFAULT_TIMEOUT_MS = 1_000;
+const DEFAULT_TIMEOUT_MS = 5_000;
 const DEFAULT_RECENT_MANIFEST_LIMIT = 5;
 
 type ExecResult = { stdout: string; stderr: string };

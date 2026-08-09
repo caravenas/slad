@@ -48,6 +48,21 @@ export async function hasUncommittedChanges(cwd: string): Promise<boolean> {
   return (await git(cwd, "status", "--porcelain")).length > 0;
 }
 
+/** Parses NUL-delimited `git status --porcelain=v1 -z` output into changed paths. */
+export function parseGitStatusPorcelainZ(stdout: string): Set<string> {
+  const entries = stdout.split("\0");
+  const files = new Set<string>();
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    if (!entry || entry.length < 4) continue;
+    const status = entry.slice(0, 2);
+    const file = entry.slice(3);
+    if (file) files.add(file);
+    if (status.includes("R") || status.includes("C")) index += 1;
+  }
+  return files;
+}
+
 function safeRealpath(target: string): string {
   try {
     return fs.realpathSync(target);
@@ -62,11 +77,15 @@ export async function removeSessionWorktrees(cwd: string, sessionId: string): Pr
   // git reports fully resolved paths; the caller's cwd may traverse symlinks
   // (e.g. /var → /private/var on macOS), so match against both forms.
   const rootReal = safeRealpath(root);
+  // Match only the root itself or paths under it — a bare prefix check would
+  // also catch siblings like ".../worktrees-backup".
+  const isUnderRoot = (candidate: string, base: string): boolean =>
+    candidate === base || candidate.startsWith(base + path.sep);
   const listing = await git(cwd, "worktree", "list", "--porcelain").catch(() => "");
   for (const line of listing.split("\n")) {
     if (!line.startsWith("worktree ")) continue;
     const worktreePath = line.slice("worktree ".length);
-    if (worktreePath.startsWith(root) || worktreePath.startsWith(rootReal)) {
+    if (isUnderRoot(worktreePath, root) || isUnderRoot(worktreePath, rootReal)) {
       await git(cwd, "worktree", "remove", "--force", worktreePath).catch(() => undefined);
     }
   }
@@ -114,17 +133,11 @@ export async function commitTaskWork(
   taskId: string,
   title: string,
 ): Promise<TaskCommitResult> {
-  const status = await git(worktreeDir, "status", "--porcelain");
-  if (!status) return { committed: false, changedFiles: [] };
-
-  const changedFiles = status
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const pathPart = line.slice(3);
-      const renamed = pathPart.split(" -> ");
-      return (renamed[renamed.length - 1] ?? pathPart).trim();
-    });
+  // Raw exec (not the trimming git() helper): the status prefix of the first
+  // entry may start with a space, and trimming it shifts the path offset.
+  const { stdout } = await execP("git", ["-C", worktreeDir, "status", "--porcelain=v1", "-z"]);
+  const changedFiles = [...parseGitStatusPorcelainZ(stdout)];
+  if (changedFiles.length === 0) return { committed: false, changedFiles: [] };
 
   await git(worktreeDir, "add", "-A");
   await git(worktreeDir, ...COMMIT_FLAGS, "commit", "--no-verify", "-m", `slad ${taskId}: ${title}`);
@@ -160,6 +173,12 @@ export async function mergeTaskBranch(
 export async function squashIntoMain(cwd: string, setup: IntegrationSetup): Promise<string | null> {
   const tip = await integrationTip(setup);
   if (tip === setup.baseRef) return null; // nothing merged — nothing to apply
+  // The main worktree was clean when the run started; anything here now
+  // appeared mid-run (user edits, a rogue worker) and a squash on top of it
+  // would mix that work with the session's result.
+  if (await hasUncommittedChanges(cwd)) {
+    return "el worktree principal tiene cambios sin commitear que aparecieron durante el run";
+  }
   try {
     await git(cwd, "merge", "--squash", setup.integrationBranch);
     return null;

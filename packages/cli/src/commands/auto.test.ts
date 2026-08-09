@@ -10,12 +10,15 @@ import {
   stageArtifactDirName,
 } from "@slad/pipeline";
 import {
+  autoIntentMatchesSession,
   completedRunTaskIds,
   isCompleteAutoStageOutput,
+  manifestPlanFromEnvelope,
+  manifestTasksFromPlan,
   normalizeSpuriousAwaitingHuman,
   planPendingRunTasks,
 } from "./auto.js";
-import type { PlanOutput, RunOutput } from "../core/types.js";
+import type { PlanArtifactEnvelope, PlanOutput, RunOutput, SessionState } from "../core/types.js";
 
 /**
  * Tests para el comando auto.
@@ -161,6 +164,50 @@ describe("auto helpers", () => {
     assert.deepEqual(pending.tasks[0]?.dependsOn, []);
     assert.deepEqual(pending.tasks[1]?.dependsOn, ["T2"]);
     assert.equal(pending.recommendedFirstTask, "T2");
+  });
+
+  it("autoIntentMatchesSession bloquea sesiones con otra intención", () => {
+    const session = { intent: "implementar T4B" } as SessionState;
+
+    assert.equal(autoIntentMatchesSession("implementar T4B", session), true);
+    assert.equal(autoIntentMatchesSession("otra tarea", session), false);
+  });
+
+  it("manifest helpers copian plan/hash/tareas desde el envelope real", () => {
+    const plan: PlanOutput = {
+      status: "completed",
+      snapshot: "test",
+      summary: "Plan de prueba",
+      tasks: [
+        {
+          id: "T1",
+          title: "Base",
+          description: "Completar base",
+          type: "implementation",
+          priority: "high",
+          dependsOn: [],
+          files: ["src/base.ts"],
+          acceptanceCriteria: ["T1 completa"],
+        },
+      ],
+      verification: [],
+      risks: [],
+      openQuestions: [],
+      recommendedFirstTask: "T1",
+      questions: [],
+      decisions: [],
+    };
+    const envelope = {
+      planId: "session-r1",
+      approval: { status: "pending", planHash: "abc123" },
+    } as PlanArtifactEnvelope;
+
+    assert.deepEqual(manifestPlanFromEnvelope(envelope), {
+      planId: "session-r1",
+      hash: "abc123",
+      approval: "pending",
+    });
+    assert.deepEqual(manifestTasksFromPlan(plan, "skipped"), [{ taskId: "T1", status: "skipped" }]);
   });
 
 });

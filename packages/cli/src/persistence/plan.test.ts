@@ -230,9 +230,14 @@ describe("persistence/plan", () => {
     onDisk.plan.tasks[0].files.push("src/cache/store.ts");
     fs.writeFileSync(written.ref.path, JSON.stringify(onDisk, null, 2), "utf8");
 
-    const { value, warnings } = await readPlan(written.ref.path);
+    const { value, warnings, staleApproval } = await readPlan(written.ref.path);
 
     assert.equal(value.approval.status, "pending");
+    assert.deepEqual(staleApproval, {
+      status: "approved",
+      planHash: planHashOf(makePlan()),
+      currentPlanHash: planHashOf(value.plan),
+    });
     assert.equal(warnings.length, 1);
     assert.match(warnings[0]!, /planHash mismatch/i);
   });

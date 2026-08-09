@@ -15,11 +15,14 @@ import {
   hasUncommittedChanges,
   integrationTip,
   mergeTaskBranch,
+  parseGitStatusPorcelainZ,
   removeSessionWorktrees,
   setupIntegration,
   squashIntoMain,
   type IntegrationSetup,
 } from "./worktrees.js";
+
+export { parseGitStatusPorcelainZ } from "./worktrees.js";
 
 const exec = promisify(execFile);
 
@@ -188,20 +191,6 @@ export function isPhantomCompletion(
     if (expected.has(file)) return false;
   }
   return true;
-}
-
-export function parseGitStatusPorcelainZ(stdout: string): Set<string> {
-  const entries = stdout.split("\0");
-  const files = new Set<string>();
-  for (let index = 0; index < entries.length; index += 1) {
-    const entry = entries[index];
-    if (!entry || entry.length < 4) continue;
-    const status = entry.slice(0, 2);
-    const file = entry.slice(3);
-    if (file) files.add(file);
-    if (status.includes("R") || status.includes("C")) index += 1;
-  }
-  return files;
 }
 
 async function gitChangedFiles(cwd: string): Promise<Set<string>> {
@@ -389,7 +378,10 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
   if (useWorktrees) {
     await assertWorktreeReady(cwd);
     if (await hasUncommittedChanges(cwd)) {
-      print(kleur.yellow("⚠ Hay cambios sin commitear: los workers parten de HEAD y no los verán."));
+      throw new Error(
+        "El modo --worktrees requiere un worktree principal limpio: los workers parten de HEAD " +
+        "y el squash final se aplica sobre él. Haz commit o stash de tus cambios y reintenta.",
+      );
     }
     integration = await setupIntegration(cwd, sessionId);
   }
@@ -466,9 +458,12 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
       }
     } else {
       const afterWave = await listChangedFiles();
+      // Only files that changed during this wave count as evidence — dirt that
+      // predates the wave must not vouch for a worker that wrote nothing.
+      const waveDelta = new Set([...afterWave].filter((file) => !beforeWave!.has(file)));
       for (const [index, task] of wave.entries()) {
         const output = waveOutputs[index]!;
-        if (isPhantomCompletion(task, output, afterWave)) flagPhantomCompletion(task, output);
+        if (isPhantomCompletion(task, output, waveDelta)) flagPhantomCompletion(task, output);
       }
       const violations = computeOwnershipViolations(beforeWave!, afterWave, new Set(wave.flatMap((task) => task.files)));
       if (violations.length > 0) {
@@ -502,6 +497,9 @@ export async function runParallel(options: ParallelRunOptions): Promise<Parallel
         `⚠ No se pudo aplicar el resultado al worktree principal: ${squashError}\n` +
         `  Los cambios integrados quedan en la rama ${integration.integrationBranch}.`,
       ));
+      // The main worktree never received the result: the run failed even if
+      // every task completed. Worktrees/branches are kept for manual recovery.
+      return { status: "failed", outputs };
     } else if (keepWorktrees) {
       print(kleur.dim(`  worktrees conservados en .slad-os/sessions/${sessionId}/worktrees/`));
     } else {

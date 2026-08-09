@@ -14,6 +14,7 @@ import { modelCommand } from "./commands/model.js";
 import {
   sessionStartCommand,
   sessionListCommand,
+  sessionResumeCommand,
   sessionUseCommand,
   sessionShowCommand,
 } from "./commands/session.js";
@@ -179,6 +180,7 @@ pipelineCmd
   .option("--json", "Imprimir JSON plano en stdout en lugar del resumen legible")
   .option("--approve", "Aprobar el plan actual de la sesión sin generar uno nuevo")
   .option("--reject", "Rechazar el plan actual de la sesión sin generar uno nuevo")
+  .option("--check", "Validar el plan actual (preflight read-only) sin aprobarlo ni ejecutarlo")
   .option("--reason <text>", "Motivo opcional al aprobar o rechazar un plan")
   .option("--skip-session", "Ignorar sesión activa (comportamiento v0.1.0)")
   .action(async (opts) => {
@@ -343,9 +345,8 @@ const sessionCmd = pipelineCmd
 sessionCmd
   .command("start <intent...>")
   .description("Crea una nueva sesión y la marca como activa.")
-  .option("-a, --agent <name>", "Agente local (codex | claude | pi | agy) — pre-selecciona sin pasar por discovery")
-  .action(async (intentParts: string[], opts) => {
-    await sessionStartCommand(intentParts.join(" "), opts.agent);
+  .action(async (intentParts: string[]) => {
+    await sessionStartCommand(intentParts.join(" "));
   });
 
 sessionCmd
@@ -360,6 +361,13 @@ sessionCmd
   .description("Cambia la sesión activa.")
   .action(async (id: string) => {
     await sessionUseCommand(id);
+  });
+
+sessionCmd
+  .command("resume [id]")
+  .description("Reanuda la sesión activa o la sesión indicada.")
+  .action(async (id: string | undefined) => {
+    await sessionResumeCommand(id);
   });
 
 sessionCmd

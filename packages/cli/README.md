@@ -33,9 +33,9 @@ Comandos del inventario actual:
 - `evolve` - `src/commands/evolve.ts` - output: `EvolveOutput`
 - `explore` - `src/commands/explore.ts` - output: `ExploreOutput`
 - `learn` - `src/commands/learn.ts` - output: `LearnOutput`
-- `plan` - `src/commands/plan.ts` - output: `PlanOutput`; use `--approve` or `--reject` for the active plan
+- `plan` - `src/commands/plan.ts` - output: `PlanOutput`; use `--approve` or `--reject` for the active plan, `--check` for a read-only preflight
 - `run` - `src/commands/run.ts` - output: `RunOutput`
-- `sessionStart` - `src/commands/session.ts`
+- `session` - `src/commands/session.ts` - subcomandos: `start` crea una sesión nueva y la activa; `resume` reanuda la sesión activa o la indicada; además `list`, `use`, `show`
 - `snapshot` - `src/commands/snapshot.ts` - output: `SnapshotOutput`
 - `stats` - `src/commands/stats.ts`
 
@@ -85,6 +85,10 @@ Schemas inventariados actualmente:
 Las etapas del pipeline no usan HITL ni reintentan preguntas del modelo.
 Las preguntas quedan registradas como assumptions, open questions o follow-ups según el output.
 `auto` persiste únicamente el plan v2 con `approval.status: "pending"`; aprobalo con `slad pipeline plan --approve` antes de `run` o de reanudar `auto`.
+`plan --approve` y `run` ejecutan primero un preflight del plan: vínculo con la sesión, estado de aprobación, integridad del DAG de tareas y rutas declaradas.
+`plan --check` corre ese mismo preflight en modo read-only (no exige ni registra aprobación): imprime el reporte — o el gate como JSON con `--json` — y sale con `0` si el plan está limpio, `1` si hay blockers.
+Cualquier bloqueo detiene el comando con exit code distinto de cero; `--bypass` solo omite el bloqueo de aprobación faltante.
+Los `files` de cada tarea deben ser rutas posix relativas, literales y normalizadas: sin globs, sin backslashes, sin rutas absolutas y sin segmentos `..`.
 
 ## Providers
 
@@ -155,6 +159,9 @@ slad pipeline plan --approve
 slad pipeline run --task T1 --harness on
 slad pipeline run --parallel --bypass   # override explícito si necesitás ejecutar un plan no aprobado
 ```
+
+`--worktrees` requiere `--parallel`, un HEAD commiteado y un worktree principal limpio; cambios sin commitear abortan el run antes de lanzar workers.
+Si el squash final no puede aplicarse, el run falla y el resultado integrado queda en la rama de integración de la sesión (`slad/<sessionId>/...`), con los worktrees conservados para recuperación manual.
 
 Tests (`node:test`):
 

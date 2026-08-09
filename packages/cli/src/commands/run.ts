@@ -5,7 +5,7 @@ import { runSladPipeline } from "@slad/pipeline";
 import { getModel, loadConfig, resolveProvider } from "../core/config.js";
 import { getSladProvider } from "../core/providers.js";
 import { log } from "../core/logger.js";
-import { writeArtifact } from "../persistence/index.js";
+import { writeArtifact, type ReadPlanResult } from "../persistence/index.js";
 import { readProjectMemory } from "../persistence/global-memory.js";
 import { createHitlTransport } from "@slad/hitl";
 import { createHarness } from "@slad/harness";
@@ -15,6 +15,7 @@ import { getActiveSession, appendArtifact, readSessionPlan, saveSession } from "
 import { PlanOutput, type PlanArtifactEnvelope, type RunOutput } from "../core/types.js";
 import { ProviderError } from "../core/errors.js";
 import { runParallel } from "./run-parallel.js";
+import { gatePlanPreflight, printPlanPreflight } from "../core/plan-preflight.js";
 import { completeRunManifest, createRunManifest, interruptStaleRunManifests, sha256File, updateRunManifest } from "../persistence/manifest.js";
 
 export interface RunOpts {
@@ -43,40 +44,64 @@ export interface RunOpts {
 export async function runCommand(opts: RunOpts): Promise<void> {
   const cwd = process.cwd();
 
+  // Invalid flag combinations fail fast, before any session read or manifest.
+  if (opts.worktrees && !opts.parallel) {
+    log.error("--worktrees requiere --parallel: el modo worktrees solo aplica al run paralelo.");
+    process.exitCode = 1;
+    return;
+  }
+  if (opts.keepWorktrees && !opts.worktrees) {
+    log.error("--keep-worktrees requiere --worktrees: sin worktrees no hay nada que conservar.");
+    process.exitCode = 1;
+    return;
+  }
+
   const session = opts.skipSession ? null : getActiveSession(cwd);
   const intent = session?.intent ?? "continue plan execution";
 
-  // Load the normalized plan envelope — execution requires explicit approval.
-  let planInput: unknown | undefined;
-  let planEnvelope: PlanArtifactEnvelope | undefined;
-  if (session) {
-    try {
-      const result = await readSessionPlan(session);
-      if (!result) {
-        log.error("No se encontró un plan para esta sesión. Ejecuta /plan primero.");
-        return;
-      }
-      const status = result.value.approval.status;
-      if (status !== "approved" && !opts.bypass) {
-        log.error(`El plan actual está ${status}; no se puede ejecutar.`);
-        log.dim("  Aprobalo con `slad pipeline plan --approve` o usá --bypass bajo tu responsabilidad.");
-        return;
-      }
-      planEnvelope = result.value;
-      planInput = result.value.plan;
-    } catch {
-      log.error("No se encontró un plan para esta sesión. Ejecuta /plan primero.");
-      return;
-    }
-  } else {
+  if (!session) {
     log.error("No hay sesión activa. Ejecuta /auto o /explore primero.");
+    process.exitCode = 1;
+    return;
+  }
+
+  // Load the normalized plan envelope — execution requires explicit approval.
+  let planRead: ReadPlanResult | null;
+  try {
+    planRead = await readSessionPlan(session);
+  } catch {
+    planRead = null;
+  }
+  if (!planRead) {
+    log.error("No se encontró un plan para esta sesión. Ejecuta /plan primero.");
+    process.exitCode = 1;
+    return;
+  }
+  const planEnvelope: PlanArtifactEnvelope = planRead.value;
+  const planInput: unknown = planEnvelope.plan;
+
+  // Preflight gates every execution path before any manifest is created.
+  // --bypass only skips the missing-approval blocker; integrity blockers
+  // (digest/hash, task graph, declared paths) always stop the run.
+  const gate = gatePlanPreflight(planEnvelope, "run", {
+    bypass: opts.bypass,
+    expectedSession: { id: session.id, intent: session.intent },
+    staleApproval: planRead.staleApproval,
+  });
+  printPlanPreflight(gate, planRead.warnings);
+  if (!gate.ok) {
+    if (gate.blockers.some((issue) => issue.code === "approval.status.not-approved")) {
+      log.dim("  Aprobalo con `slad pipeline plan --approve` o usá --bypass bajo tu responsabilidad.");
+    }
+    log.error("Preflight bloqueó la ejecución; el plan no puede correr en este estado.");
+    process.exitCode = 1;
     return;
   }
 
   const config = loadConfig();
   const providerName = resolveProvider(opts.provider, opts.agent, config.defaultProvider, config.defaultAgent);
   const selectedModel = opts.model ?? getModel(providerName);
-  const parsedPlan = PlanOutput.safeParse(planInput);
+  const parsedPlan = PlanOutput.parse(planInput);
   await interruptStaleRunManifests(session.id, cwd);
   const manifest = await createRunManifest({
     sessionId: session.id,
@@ -93,9 +118,7 @@ export async function runCommand(opts: RunOpts): Promise<void> {
       model: selectedModel,
     },
     stages: [{ id: "run", status: "pending" }],
-    tasks: parsedPlan.success
-      ? parsedPlan.data.tasks.map((task) => ({ taskId: task.id, status: "pending" as const }))
-      : [],
+    tasks: parsedPlan.tasks.map((task) => ({ taskId: task.id, status: "pending" as const })),
     limits: {
       maxTasks: opts.maxTasks ?? 10,
       maxParallel: opts.parallel ? (opts.maxParallel ?? 3) : undefined,
@@ -106,19 +129,13 @@ export async function runCommand(opts: RunOpts): Promise<void> {
 
   try {
   if (opts.parallel) {
-    const parsed = PlanOutput.safeParse(planInput);
-    if (!parsed.success) {
-      log.error("El plan de la sesión no es un PlanOutput válido; no se puede ejecutar en paralelo.");
-      return;
-    }
-
     // Workers read the model from env; an explicit -m must win over config.
     if (opts.model) process.env.CLI_MODEL = opts.model;
 
     log.title(`Run (parallel) · ${process.env.SLAD_CLI_BINARY ?? "cli"} · max ${opts.maxParallel ?? 3}`);
     let currentSession = session;
     const parallelResult = await runParallel({
-      plan: parsed.data,
+      plan: parsedPlan,
       sessionId: session.id,
       cwd,
       maxParallel: opts.maxParallel ?? 3,

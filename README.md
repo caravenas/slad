@@ -92,6 +92,11 @@ slad pipeline plan --approve         # mark the exact plan hash as approved
 slad pipeline run --parallel --max-parallel 3
 ```
 
+Both `plan --approve` and `run` first pass a plan preflight: session binding, approval state, task-DAG integrity, and declared file paths are validated, and any blocker stops the command with a non-zero exit.
+`slad pipeline plan --check` runs the same preflight read-only (it does not require or record an approval): it prints the report — or the gate as JSON with `--json` — and exits `0` when the plan is clean, `1` on blockers.
+`--bypass` skips only the missing-approval blocker; integrity blockers always stop the run.
+Each task's `files` must be literal repo-relative posix paths — globs, backslashes, absolute paths, and `..` segments are preflight blockers, because scheduling and ownership checks compare paths literally.
+
 `run --parallel` schedules waves from the task DAG: tasks whose declared `files` don't overlap run concurrently; a task that declares no files runs alone.
 Inside tmux, each worker opens in its own window (`slad-T1`, `slad-T2`, …) so you can watch them work; the launching pane shows a live status table.
 If a cross-agent memory entry exists for the repo (`~/.agents/memory/projects/<repo>.md`), each worker's handoff prompt includes it — context the worker's own CLI would not load by itself.
@@ -108,7 +113,9 @@ git diff --cached   # review the combined result, then commit yourself
 Each task runs in its own git worktree branched from a session integration branch (`slad/<sessionId>/…`).
 Successful tasks are committed in their worktree and merged sequentially — dependent tasks branch from the updated tip, so they see earlier waves' work.
 At the end the result is squashed into your main worktree as staged, uncommitted changes; your branch gets no commits.
-Requires a committed HEAD; add `--keep-worktrees` to inspect the session worktrees afterwards.
+Worktree mode requires `--parallel`, a committed HEAD, and a clean main worktree — uncommitted changes abort the run before any worker starts.
+If the final squash cannot be applied (for example, uncommitted changes appeared mid-run), the run fails and the merged result stays on the session integration branch, with worktrees kept for manual recovery.
+Add `--keep-worktrees` to always keep the session worktrees for inspection.
 
 ### 4. Enforce the plan's file ownership
 
@@ -179,7 +186,7 @@ Pipeline runtime (`slad pipeline …`):
 | `run [task]` | Execute an approved plan; use `--auto` for the whole DAG, `--parallel` for waves, or `--bypass` to override approval |
 | `learn` | Capture decisions/errors/patterns from run reports |
 | `evolve` | Propose wiki/prompt updates from recent artifacts |
-| `session` | Manage work sessions (start, list, use, show) |
+| `session` | Manage work sessions: `start` creates a new session, `resume` reactivates the active or a given one, plus `list`, `use`, `show` |
 | `agents` | List pipeline personas (prompt sets) |
 
 Key flags for `run` / `run --parallel`:
@@ -187,7 +194,7 @@ Key flags for `run` / `run --parallel`:
 ```
 --bypass              execute even if the active plan is not approved
 --max-parallel <n>    max concurrent workers (default: 3)
---worktrees           per-task git worktrees + sequential merge + final squash
+--worktrees           per-task git worktrees + sequential merge + final squash (requires --parallel and a clean tree)
 --keep-worktrees      keep session worktrees/branches for debugging
 --strict-ownership    fail tasks that touch undeclared files
 --agent <name>        backend: claude | codex | pi | agy

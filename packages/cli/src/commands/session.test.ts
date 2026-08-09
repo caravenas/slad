@@ -1,15 +1,21 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 
-import { createSession } from "../core/session.js";
+import { createSession, getActiveSessionId, listSessions, setActiveSession } from "../core/session.js";
 import type { BootEvent, BootUi, BootUiOptions } from "../cli/ui.js";
-import { sessionStartCommand, shouldRenderVisualBootUiForEnv } from "./session.js";
+import { sessionResumeCommand, sessionStartCommand, shouldRenderVisualBootUiForEnv } from "./session.js";
 import { resetDocsRootCache } from "../persistence/layout.js";
 
 const originalDocsPath = process.env.SLAD_DOCS_PATH;
+const execFileAsync = promisify(execFile);
+const CLI_PATH = fileURLToPath(new URL("../cli.ts", import.meta.url));
+const TSX_LOADER = import.meta.resolve("tsx/esm");
 
 test.beforeEach(() => {
   delete process.env.SLAD_DOCS_PATH;
@@ -27,6 +33,14 @@ test.afterEach(() => {
 
 async function makeTempDir(prefix: string): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), prefix));
+}
+
+async function runCli(args: string[], cwd: string): Promise<{ stdout: string; stderr: string }> {
+  return execFileAsync(process.execPath, ["--import", TSX_LOADER, CLI_PATH, ...args], {
+    cwd,
+    env: { ...process.env, SLAD_DOCS_PATH: path.join(cwd, "docs") },
+    timeout: 10_000,
+  });
 }
 
 function createBootUiSpy(events: BootEvent[], enabledValues: boolean[]) {
@@ -88,9 +102,9 @@ test("session start nueva sesión emite banner/progreso por hitos", { concurrenc
   }
 });
 
-test("session start resume no renderiza banner/progreso", { concurrency: false }, async () => {
+test("session start siempre crea una sesión nueva aunque exista activa", { concurrency: false }, async () => {
   const cwd = process.cwd();
-  const project = await makeTempDir("slad-session-ui-resume-");
+  const project = await makeTempDir("slad-session-create-only-");
   process.chdir(project);
 
   const existing = createSession("sesion existente para resume");
@@ -100,12 +114,112 @@ test("session start resume no renderiza banner/progreso", { concurrency: false }
   const enabledValues: boolean[] = [];
 
   try {
-    await sessionStartCommand("ignorado en resume", {
+    await sessionStartCommand("nueva intencion explicita", {
       bootUiFactory: createBootUiSpy(events, enabledValues),
     });
 
     assert.deepEqual(enabledValues, [false]);
-    assert.equal(events.length, 0);
+    assert.equal(events.some((event) => event.type === "banner"), true);
+
+    const sessions = listSessions();
+    const activeId = getActiveSessionId();
+
+    assert.equal(sessions.length, 2);
+    assert.notEqual(activeId, existing.id);
+    assert.equal(sessions.find((session) => session.id === activeId)?.intent, "nueva intencion explicita");
+  } finally {
+    process.chdir(cwd);
+  }
+});
+
+test("session resume sin id reanuda la sesión activa actual", { concurrency: false }, async () => {
+  const cwd = process.cwd();
+  const project = await makeTempDir("slad-session-resume-current-");
+  process.chdir(project);
+
+  try {
+    const current = createSession("sesion actual");
+
+    await sessionResumeCommand();
+
+    assert.equal(getActiveSessionId(), current.id);
+  } finally {
+    process.chdir(cwd);
+  }
+});
+
+test("session resume con id carga y marca esa sesión como activa", { concurrency: false }, async () => {
+  const cwd = process.cwd();
+  const project = await makeTempDir("slad-session-resume-id-");
+  process.chdir(project);
+
+  try {
+    const first = createSession("primera sesion");
+    const second = createSession("segunda sesion");
+    setActiveSession(first.id);
+
+    await sessionResumeCommand(second.id);
+
+    assert.equal(getActiveSessionId(), second.id);
+  } finally {
+    process.chdir(cwd);
+  }
+});
+
+test("CLI wiring expone session resume [id]", { concurrency: false }, async () => {
+  const cwd = process.cwd();
+  const project = await makeTempDir("slad-session-cli-resume-");
+  process.chdir(project);
+
+  try {
+    const first = createSession("primera sesion cli");
+    const second = createSession("segunda sesion cli");
+    setActiveSession(first.id);
+
+    const result = await runCli(["pipeline", "session", "resume", second.id], project);
+
+    assert.match(result.stdout, new RegExp(`Sesión resumida: ${second.id}`));
+    assert.equal(getActiveSessionId(project), second.id);
+  } finally {
+    process.chdir(cwd);
+  }
+});
+
+test("CLI session resume con id inexistente sale con error", { concurrency: false }, async () => {
+  const cwd = process.cwd();
+  const project = await makeTempDir("slad-session-cli-resume-missing-");
+  process.chdir(project);
+
+  try {
+    await assert.rejects(
+      runCli(["pipeline", "session", "resume", "missing-session"], project),
+      (err: unknown) => {
+        const error = err as { code?: number; stderr?: string };
+        assert.equal(error.code, 1);
+        assert.match(error.stderr ?? "", /No se pudo reanudar la sesión: missing-session/);
+        return true;
+      },
+    );
+  } finally {
+    process.chdir(cwd);
+  }
+});
+
+test("CLI session start ya no acepta --agent", { concurrency: false }, async () => {
+  const cwd = process.cwd();
+  const project = await makeTempDir("slad-session-cli-start-agent-");
+  process.chdir(project);
+
+  try {
+    await assert.rejects(
+      runCli(["pipeline", "session", "start", "--agent", "codex", "nueva sesion"], project),
+      (err: unknown) => {
+        const error = err as { code?: number; stderr?: string };
+        assert.equal(error.code, 1);
+        assert.match(error.stderr ?? "", /unknown option '--agent'/i);
+        return true;
+      },
+    );
   } finally {
     process.chdir(cwd);
   }

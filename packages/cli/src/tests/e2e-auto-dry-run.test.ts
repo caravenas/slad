@@ -106,6 +106,7 @@ async function withFixtureProject(
   const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   const originalCwd = process.cwd();
   const originalDocsPathEnv = process.env.SLAD_DOCS_PATH;
+  const originalExitCode = process.exitCode;
   fs.writeFileSync(path.join(fixtureDir, "AGENTS.md"), "# Project\nA demo project.\n", "utf8");
   fs.mkdirSync(path.join(fixtureDir, "src"), { recursive: true });
   fs.writeFileSync(path.join(fixtureDir, "src", "math.ts"), "export {};\n", "utf8");
@@ -113,10 +114,12 @@ async function withFixtureProject(
   try {
     process.chdir(fixtureDir);
     process.env.SLAD_DOCS_PATH = path.join(fixtureDir, "docs");
+    process.exitCode = undefined;
     resetDocsRootCache();
     await fn(fixtureDir);
   } finally {
     resetDocsRootCache();
+    process.exitCode = originalExitCode;
     if (originalDocsPathEnv === undefined) delete process.env.SLAD_DOCS_PATH;
     else process.env.SLAD_DOCS_PATH = originalDocsPathEnv;
     process.chdir(originalCwd);
@@ -134,6 +137,7 @@ describe("E2E: slad auto --dry-run (mock provider)", { concurrency: 1 }, () => {
   let fixtureDir: string;
   let originalCwd: string;
   let originalDocsPathEnv: string | undefined;
+  let originalExitCode: string | number | null | undefined;
 
   before(() => {
     fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), "slad-e2e-"));
@@ -143,13 +147,16 @@ describe("E2E: slad auto --dry-run (mock provider)", { concurrency: 1 }, () => {
     fs.writeFileSync(path.join(fixtureDir, "src", "math.ts"), "export {};\n", "utf8");
     originalCwd = process.cwd();
     originalDocsPathEnv = process.env.SLAD_DOCS_PATH;
+    originalExitCode = process.exitCode;
     process.chdir(fixtureDir);
     process.env.SLAD_DOCS_PATH = path.join(fixtureDir, "docs");
+    process.exitCode = undefined;
     resetDocsRootCache();
   });
 
   after(() => {
     resetDocsRootCache();
+    process.exitCode = originalExitCode;
     if (originalDocsPathEnv === undefined) delete process.env.SLAD_DOCS_PATH;
     else process.env.SLAD_DOCS_PATH = originalDocsPathEnv;
     process.chdir(originalCwd);

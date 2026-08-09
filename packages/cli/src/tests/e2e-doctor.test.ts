@@ -76,7 +76,7 @@ async function runCli(args: string[], fixture: Fixture, extraEnv: NodeJS.Process
   return execFileAsync(process.execPath, ["--import", TSX_LOADER, CLI_PATH, ...args], {
     cwd: fixture.projectDir,
     env: cliEnv(fixture, extraEnv),
-    timeout: 10_000,
+    timeout: 30_000,
   });
 }
 
@@ -85,7 +85,7 @@ async function runCliWithExit(args: string[], fixture: Fixture, extraEnv: NodeJS
     execFile(process.execPath, ["--import", TSX_LOADER, CLI_PATH, ...args], {
       cwd: fixture.projectDir,
       env: cliEnv(fixture, extraEnv),
-      timeout: 10_000,
+      timeout: 30_000,
     }, (error, stdout, stderr) => {
       const code = error && "code" in error && typeof error.code === "number" ? error.code : 0;
       resolve({ stdout: String(stdout), stderr: String(stderr), code });

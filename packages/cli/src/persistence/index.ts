@@ -229,6 +229,13 @@ export interface ReadPlanResult {
   /** True when the file on disk was a pre-approval (v1) plan artifact. */
   legacy: boolean;
   warnings: string[];
+  staleApproval?: StalePlanApproval;
+}
+
+export interface StalePlanApproval {
+  status: Exclude<PlanApprovalStatus, "pending">;
+  planHash: string;
+  currentPlanHash: string;
 }
 
 export interface WritePendingPlanOptions {
@@ -393,7 +400,7 @@ async function decidePlan(
  */
 function withFreshApproval(
   value: PlanArtifactEnvelope,
-): { value: PlanArtifactEnvelope; warnings: string[] } {
+): { value: PlanArtifactEnvelope; warnings: string[]; staleApproval?: StalePlanApproval } {
   const planHash = planHashOf(value.plan);
   if (planHash === value.approval.planHash) return { value, warnings: [] };
 
@@ -401,11 +408,18 @@ function withFreshApproval(
     return { value: { ...value, approval: { ...value.approval, planHash } }, warnings: [] };
   }
 
+  const staleApproval = {
+    status: value.approval.status,
+    planHash: value.approval.planHash,
+    currentPlanHash: planHash,
+  } satisfies StalePlanApproval;
+
   return {
     value: {
       ...value,
       approval: { status: "pending", planHash },
     },
+    staleApproval,
     warnings: [
       `plan body changed since it was ${value.approval.status} (planHash mismatch); treating it as pending`,
     ],

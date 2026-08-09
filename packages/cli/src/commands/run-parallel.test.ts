@@ -15,6 +15,7 @@ import {
   renderStatusTable,
   runParallel,
 } from "./run-parallel.js";
+import { commitTaskWork, removeSessionWorktrees } from "./worktrees.js";
 
 function task(id: string, files: string[], dependsOn: string[] = []): PlanTask {
   return {
@@ -349,6 +350,25 @@ describe("runParallel", () => {
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 
+  it("la suciedad previa a la ola no respalda una phantom-completion", async () => {
+    const cwd = tmpCwd();
+    // a.ts ya estaba sucio antes de la ola; el worker no escribe nada.
+    const result = await runParallel({
+      plan: plan([task("T1", ["a.ts"])]),
+      sessionId: "s1",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: false,
+      print: () => undefined,
+      listChangedFiles: async () => new Set(["a.ts"]),
+      runWorker: async ({ task: t }) => ({ exitCode: 0, stdout: workerJson(t.id) }),
+    });
+
+    assert.equal(result.outputs[0]!.status, "completed");
+    assert.ok(result.outputs[0]!.reviewerNotes.some((n) => n.includes("phantom-completion")));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
   it("sin strict ownership la violación solo deja nota", async () => {
     const cwd = tmpCwd();
     let call = 0;
@@ -400,21 +420,21 @@ describe("computeOwnershipViolations — exenciones", () => {
   });
 });
 
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
+}
+
+function makeRepo(): string {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "slad-wt-"));
+  git(cwd, "init", "-q");
+  fs.writeFileSync(path.join(cwd, "README.md"), "# repo\n");
+  fs.writeFileSync(path.join(cwd, ".gitignore"), ".slad-os/\n");
+  git(cwd, "add", "-A");
+  git(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init");
+  return cwd;
+}
+
 describe("runParallel — worktrees", () => {
-  function git(cwd: string, ...args: string[]): string {
-    return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
-  }
-
-  function makeRepo(): string {
-    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "slad-wt-"));
-    git(cwd, "init", "-q");
-    fs.writeFileSync(path.join(cwd, "README.md"), "# repo\n");
-    fs.writeFileSync(path.join(cwd, ".gitignore"), ".slad-os/\n");
-    git(cwd, "add", "-A");
-    git(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init");
-    return cwd;
-  }
-
   /** Worker that writes its owned files inside its (isolated) workspace. */
   function writingWorker(observed: Record<string, string[]>) {
     return async ({ task, workspace }: { task: PlanTask; workspace: string }) => {
@@ -528,6 +548,101 @@ describe("runParallel — worktrees", () => {
     const second = await runParallel({ ...opts, keepWorktrees: false });
     assert.equal(second.status, "completed");
     assert.equal(fs.readFileSync(path.join(cwd, "a.txt"), "utf8"), "T1 wrote a.txt\n");
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("rechaza el modo worktrees si el worktree principal está sucio", async () => {
+    const cwd = makeRepo();
+    fs.writeFileSync(path.join(cwd, "dirty.txt"), "uncommitted\n");
+    await assert.rejects(
+      runParallel({
+        plan: plan([task("T1", ["a.txt"])]),
+        sessionId: "wt5",
+        cwd,
+        maxParallel: 3,
+        strictOwnership: false,
+        useWorktrees: true,
+        print: () => undefined,
+        runWorker: (async () => ({ exitCode: 0, stdout: workerJson("T1") })) as never,
+      }),
+      /worktree principal limpio/,
+    );
+    // Nada quedó a medias: sin worktrees de sesión ni ramas slad.
+    assert.equal(git(cwd, "worktree", "list").split("\n").length, 1);
+    assert.equal(git(cwd, "for-each-ref", "refs/heads/slad/", "--format=%(refname)"), "");
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("aborta el squash si el worktree principal se ensució durante el run", async () => {
+    const cwd = makeRepo();
+    const lines: string[] = [];
+    const result = await runParallel({
+      plan: plan([task("T1", ["a.txt"])]),
+      sessionId: "wt6",
+      cwd,
+      maxParallel: 3,
+      strictOwnership: false,
+      useWorktrees: true,
+      print: (line) => { lines.push(line); },
+      runWorker: (async ({ task: t, workspace }: { task: PlanTask; workspace: string }) => {
+        fs.writeFileSync(path.join(workspace, "a.txt"), "ok\n");
+        // Simula una edición del usuario en el worktree principal a mitad del run.
+        fs.writeFileSync(path.join(cwd, "user-edit.txt"), "manual\n");
+        return { exitCode: 0, stdout: workerJson(t.id) };
+      }) as never,
+    });
+
+    // El squash no llegó al worktree principal: el run falla aunque las tareas
+    // hayan completado, y sus outputs se preservan para diagnóstico.
+    assert.equal(result.status, "failed");
+    assert.equal(result.outputs[0]!.status, "completed");
+    assert.ok(lines.some((line) => line.includes("No se pudo aplicar")));
+    // La edición manual queda intacta y el resultado no se mezcló encima.
+    assert.equal(fs.readFileSync(path.join(cwd, "user-edit.txt"), "utf8"), "manual\n");
+    assert.ok(!fs.existsSync(path.join(cwd, "a.txt")));
+    // La rama de integración sobrevive para recuperación manual.
+    assert.ok(git(cwd, "for-each-ref", "refs/heads/slad/wt6/", "--format=%(refname)").includes("integration"));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+});
+
+describe("worktrees — helpers", () => {
+  it("commitTaskWork preserva el primer path completo y nombres con espacios", async () => {
+    const cwd = makeRepo();
+    // README.md ordena primero: su entrada " M README.md" arranca con espacio,
+    // que un trim global corrompía cortando la primera letra del path.
+    fs.writeFileSync(path.join(cwd, "README.md"), "# repo edited\n");
+    fs.writeFileSync(path.join(cwd, "new file.txt"), "spaces\n");
+    const result = await commitTaskWork(cwd, "T1", "primer path");
+    assert.equal(result.committed, true);
+    assert.deepEqual([...result.changedFiles].sort(), ["README.md", "new file.txt"]);
+    assert.equal(git(cwd, "status", "--porcelain"), "");
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("commitTaskWork sin cambios no genera commit", async () => {
+    const cwd = makeRepo();
+    const head = git(cwd, "rev-parse", "HEAD");
+    const result = await commitTaskWork(cwd, "T1", "noop");
+    assert.deepEqual(result, { committed: false, changedFiles: [] });
+    assert.equal(git(cwd, "rev-parse", "HEAD"), head);
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("removeSessionWorktrees no toca hermanos que comparten prefijo de ruta", async () => {
+    const cwd = makeRepo();
+    const sessionRoot = path.join(cwd, ".slad-os", "sessions", "wtX");
+    const insideDir = path.join(sessionRoot, "worktrees", "T1");
+    const siblingDir = path.join(sessionRoot, "worktrees-keep");
+    git(cwd, "worktree", "add", "-q", "-B", "slad/wtX/T1", insideDir, "HEAD");
+    git(cwd, "worktree", "add", "-q", "-B", "keep-me", siblingDir, "HEAD");
+
+    await removeSessionWorktrees(cwd, "wtX");
+
+    assert.ok(!fs.existsSync(insideDir), "el worktree de la sesión debe eliminarse");
+    assert.ok(fs.existsSync(path.join(siblingDir, ".git")), "el hermano con prefijo compartido debe sobrevivir");
+    assert.ok(git(cwd, "for-each-ref", "refs/heads/keep-me", "--format=%(refname)").includes("keep-me"));
+    git(cwd, "worktree", "remove", "--force", siblingDir);
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 });

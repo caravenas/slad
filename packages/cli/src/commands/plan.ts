@@ -28,9 +28,14 @@ import {
 import {
   approvePlan,
   readArtifact,
+  readPlan,
   rejectPlan,
   writePendingPlan,
 } from "../persistence/index.js";
+import {
+  gatePlanPreflight,
+  printPlanPreflight,
+} from "../core/plan-preflight.js";
 
 export interface PlanOpts {
   input?: string;
@@ -42,6 +47,7 @@ export interface PlanOpts {
   skipSession?: boolean;
   approve?: boolean;
   reject?: boolean;
+  check?: boolean;
   reason?: string;
 }
 
@@ -207,30 +213,81 @@ export async function generatePlanOutput(options: {
 }
 
 export async function planCommand(opts: PlanOpts): Promise<void> {
-  if (opts.approve || opts.reject) {
-    if (opts.approve && opts.reject) {
-      log.error("Usá solo una de --approve o --reject.");
+  if (opts.approve || opts.reject || opts.check) {
+    const selected = [opts.check, opts.approve, opts.reject].filter(Boolean);
+    if (selected.length > 1) {
+      log.error("Usá solo una de --check, --approve o --reject.");
+      process.exitCode = 1;
       return;
     }
     if (opts.skipSession) {
-      log.error("La aprobación de un plan requiere una sesión activa.");
+      log.error("--check, --approve y --reject requieren una sesión activa.");
+      process.exitCode = 1;
       return;
     }
 
     const session = getActiveSession();
-    const planPath = session ? lastArtifactPath(session, "plan") : undefined;
+    if (!session) {
+      log.error("No se encontró un plan en la sesión activa.");
+      process.exitCode = 1;
+      return;
+    }
+    const planPath = lastArtifactPath(session, "plan");
     if (!planPath) {
       log.error("No se encontró un plan en la sesión activa.");
+      process.exitCode = 1;
       return;
     }
 
     try {
+      if (opts.check) {
+        const current = await readPlan(planPath);
+        const gate = gatePlanPreflight(current.value, "approve", {
+          expectedSession: { id: session.id, intent: session.intent },
+          staleApproval: current.staleApproval,
+        });
+        if (opts.json) {
+          console.log(JSON.stringify({
+            planPath,
+            mode: gate.report.mode,
+            ok: gate.ok,
+            blockers: gate.blockers,
+            warnings: gate.report.warnings,
+            readWarnings: current.warnings,
+          }, null, 2));
+        } else {
+          log.dim(`  plan: ${planPath}`);
+          printPlanPreflight(gate, current.warnings);
+          if (gate.ok) {
+            log.success("Preflight OK: el plan puede aprobarse con `slad pipeline plan --approve`.");
+          } else {
+            log.error(`Preflight encontró ${gate.blockers.length} blocker(s); corregí el plan o regeneralo con \`slad pipeline plan\`.`);
+          }
+        }
+        if (!gate.ok) process.exitCode = 1;
+        return;
+      }
+
+      if (opts.approve) {
+        const current = await readPlan(planPath);
+        const gate = gatePlanPreflight(current.value, "approve", {
+          expectedSession: { id: session.id, intent: session.intent },
+          staleApproval: current.staleApproval,
+        });
+        printPlanPreflight(gate, current.warnings);
+        if (!gate.ok) {
+          log.error("Preflight bloqueó la aprobación; corregí el plan o regeneralo con `slad pipeline plan`.");
+          process.exitCode = 1;
+          return;
+        }
+      }
       const plan = opts.approve
         ? await approvePlan(planPath, { reason: opts.reason })
         : await rejectPlan(planPath, { reason: opts.reason });
       log.success(`Plan ${plan.approval.status}: ${planPath}`);
     } catch (err) {
       log.error((err as Error).message);
+      process.exitCode = 1;
     }
     return;
   }

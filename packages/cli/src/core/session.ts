@@ -77,6 +77,17 @@ export function getOrCreateSession(intent: string, cwd = process.cwd()): Session
   return createSession(intent, cwd);
 }
 
+export function resumeSession(id?: string, cwd = process.cwd()): SessionState | null {
+  const sessionId = id ?? getActiveSessionId(cwd);
+  if (!sessionId) return null;
+
+  const session = loadSession(sessionId, cwd);
+  if (!session) return null;
+
+  setActiveSession(session.id, cwd);
+  return session;
+}
+
 export function saveSession(session: SessionState, cwd = process.cwd()): void {
   writeSessionFile(sessionsRoot(cwd), session);
 }

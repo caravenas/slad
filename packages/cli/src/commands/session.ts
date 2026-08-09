@@ -3,11 +3,10 @@ import {
   createSession,
   getActiveSession,
   getActiveSessionId,
-  hasPersistedActiveSession,
   listSessions,
   loadSession,
+  resumeSession,
   setActiveSession,
-  saveSession,
 } from "../core/session.js";
 import { log } from "../core/logger.js";
 import { SladError } from "../core/errors.js";
@@ -36,16 +35,12 @@ export async function sessionStartCommand(
   intent: string,
   deps: SessionStartDeps = {},
 ): Promise<void> {
-  const hasActiveSession = hasPersistedActiveSession();
   const bootUiFactory = deps.bootUiFactory ?? createBootUi;
-  const bootUi = bootUiFactory({ enabled: !hasActiveSession && shouldRenderVisualBootUi() });
-  let bootSettled = hasActiveSession;
+  const bootUi = bootUiFactory({ enabled: shouldRenderVisualBootUi() });
 
   try {
-    if (!hasActiveSession) {
-      await bootUi.showBanner();
-      bootUi.start("Iniciando sesión...");
-    }
+    await bootUi.showBanner();
+    bootUi.start("Iniciando sesión...");
     if (!intent || intent.trim().length < 3) {
       throw new SladError(
         'Intención vacía. Uso: slad session start "<intención>"',
@@ -53,38 +48,28 @@ export async function sessionStartCommand(
       );
     }
 
-    if (hasActiveSession) {
-      const resumed = getActiveSession();
-      if (!resumed) {
-        throw new SladError(
-          "No se pudo cargar la sesión activa persistida.",
-          "SESSION_START_RESUME_FAILED",
-        );
-      }
-      log.success(`Sesión resumida: ${resumed.id}`);
-      log.dim(`  intent: ${resumed.intent}`);
-      return;
-    }
-
     bootUi.milestone("config", "Creando estado base de sesión...");
-    const session = createSession(intent.trim());
-    
     bootUi.milestone("persistence", "Persistiendo estado de sesión...");
-    saveSession(session);
+    const session = createSession(intent.trim());
 
     bootUi.succeed(`Sesión creada: ${session.id}`);
-    bootSettled = true;
     log.dim(`  intent: ${session.intent}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error iniciando sesión";
     await bootUi.fail(message);
-    bootSettled = true;
     throw error;
-  } finally {
-    if (!bootSettled) {
-      bootUi.stop();
-    }
   }
+}
+
+export async function sessionResumeCommand(id?: string): Promise<void> {
+  const session = resumeSession(id);
+  if (!session) {
+    const suffix = id ? `: ${id}` : "";
+    throw new SladError(`No se pudo reanudar la sesión${suffix}.`, "SESSION_RESUME_FAILED");
+  }
+
+  log.success(`Sesión resumida: ${session.id}`);
+  log.dim(`  intent: ${session.intent}`);
 }
 
 export async function sessionListCommand(): Promise<void> {
