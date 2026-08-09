@@ -8,6 +8,7 @@ import { learnCommand } from "./commands/learn.js";
 import { evolveCommand } from "./commands/evolve.js";
 import { autoCommand } from "./commands/auto.js";
 import { statsCommand } from "./commands/stats.js";
+import { doctorCommand } from "./commands/doctor.js";
 import { agentsListCommand, agentsUseCommand } from "./commands/agents.js";
 import { modelCommand } from "./commands/model.js";
 import {
@@ -91,6 +92,14 @@ program
   .option("--json", "Imprimir JSON plano en stdout")
   .action(async (opts) => {
     await statsCommand(opts);
+  });
+
+program
+  .command("doctor")
+  .description("Diagnostica el entorno local de SLAD sin ejecutar agentes.")
+  .option("--json", "Imprimir DoctorReport JSON en stdout")
+  .action(async (opts: { json?: boolean }) => {
+    await doctorCommand(opts);
   });
 
 program

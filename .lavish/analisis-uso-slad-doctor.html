@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="es" data-theme="business">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Análisis del uso de SLAD — piloto slad doctor</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/daisyui.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/themes.css">
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.4/dist/index.global.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :where(.grid, .flex) > * { min-width: 0; }
+    :where(p, h1, h2, h3, li, td, th, .badge) { overflow-wrap: anywhere; }
+    body { background: radial-gradient(circle at top right, color-mix(in oklab, var(--color-primary) 14%, transparent), transparent 35%), var(--color-base-200); }
+    .eyebrow { letter-spacing: .18em; text-transform: uppercase; }
+    .verdict { border-left: 5px solid var(--color-warning); }
+    code { white-space: normal; }
+  </style>
+</head>
+<body>
+<main class="mx-auto max-w-7xl p-4 sm:p-8 lg:p-12">
+  <header class="card card-border bg-base-100 shadow-xl">
+    <div class="card-body gap-5">
+      <div class="eyebrow text-xs font-bold text-primary">Postmortem del piloto</div>
+      <div class="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,.8fr)] lg:items-end">
+        <div>
+          <h1 class="text-4xl font-black sm:text-6xl">SLAD sí tiene valor.<br><span class="text-warning">Pero no como “todo el workflow”.</span></h1>
+          <p class="mt-4 max-w-3xl text-lg opacity-80">El piloto demostró valor real en aprobación, DAG, worktrees, artifacts y trazabilidad. También demostró que la implementación actual añade fragilidad y ceremonia justo en las fronteras donde prometía control.</p>
+        </div>
+        <div class="stats stats-vertical bg-base-200 shadow">
+          <div class="stat"><div class="stat-title">Revisiones de plan</div><div class="stat-value">r2 → r6</div><div class="stat-desc">3 rechazos antes del primer run + 2 follow-ups</div></div>
+          <div class="stat"><div class="stat-title">Run estricto inicial</div><div class="stat-value text-error">Falló</div><div class="stat-desc">Falso positivo del parser porcelain</div></div>
+          <div class="stat"><div class="stat-title">Resultado final</div><div class="stat-value text-success">326/327</div><div class="stat-desc">tests aprobados; 1 omitido</div></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="mt-8 grid gap-4 md:grid-cols-3">
+    <article class="card card-border bg-base-100"><div class="card-body"><span class="badge badge-success badge-soft">Valor probado</span><h2 class="card-title">Control operacional</h2><p>Plan con hash y aprobación, DAG explícito, worktrees, cambios staged, manifests y outputs por tarea.</p></div></article>
+    <article class="card card-border bg-base-100"><div class="card-body"><span class="badge badge-error badge-soft">Costo probado</span><h2 class="card-title">Fricción y fallos propios</h2><p>Sesión contaminada, ownership literal sin globs, parser que truncó paths y follow-ups incompatibles con worktrees al haber cambios staged.</p></div></article>
+    <article class="card card-border bg-base-100"><div class="card-body"><span class="badge badge-warning badge-soft">Conclusión</span><h2 class="card-title">Valor condicional</h2><p>Sirve para ejecución compleja y verificable. Para tareas pequeñas o como planificador LLM completo, su costo puede superar su beneficio.</p></div></article>
+  </section>
+
+  <section class="mt-8 card card-border bg-base-100">
+    <div class="card-body">
+      <h2 class="card-title text-2xl">Qué ocurrió realmente</h2>
+      <div class="overflow-x-auto rounded-box border border-base-content/10">
+        <table class="table table-zebra">
+          <thead><tr><th>Etapa</th><th>Evidencia</th><th>Qué prueba</th><th>Lectura</th></tr></thead>
+          <tbody>
+            <tr><td>Plan inicial</td><td>Globs en ownership</td><td>El planner no conocía que SLAD compara rutas literales</td><td><span class="badge badge-error">Bloqueo evitado por Pi</span></td></tr>
+            <tr><td>Sesión</td><td>Intent persistido: <code>add agy cli</code></td><td><code>session start</code> reanudó contexto viejo</td><td><span class="badge badge-error">Trazabilidad degradada</span></td></tr>
+            <tr><td>Run r4 estricto</td><td><code>packages</code> → <code>ackages</code></td><td>El parser eliminó el espacio inicial de porcelain</td><td><span class="badge badge-error">Control falso</span></td></tr>
+            <tr><td>Run r4 relajado</td><td>4 tareas completadas en worktrees</td><td>DAG, aislamiento y squash staged sí funcionaron</td><td><span class="badge badge-success">Valor real</span></td></tr>
+            <tr><td>Revisión independiente</td><td>Lint falló; faltaban versiones/config persistida</td><td>El auto-reporte del worker no bastaba</td><td><span class="badge badge-warning">Pi siguió siendo esencial</span></td></tr>
+            <tr><td>Runs r5/r6</td><td>Follow-ups acotados y completos</td><td>SLAD permitió corrección incremental, pero sin worktrees</td><td><span class="badge badge-success">Útil con supervisión</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="mt-8 grid gap-5 lg:grid-cols-2">
+    <article class="card card-border bg-base-100"><div class="card-body">
+      <h2 class="card-title text-success">Pros</h2>
+      <ul class="list-disc space-y-2 pl-5">
+        <li>Convierte un prompt amplio en tareas, dependencias y ownership revisables.</li>
+        <li>Crea una frontera explícita de aprobación ligada al hash del plan.</li>
+        <li>Aísla workers y devuelve cambios staged sin commits ocultos.</li>
+        <li>Conserva manifests, artifacts, outputs y verificaciones por tarea.</li>
+        <li>Hace visibles phantom completions, conflictos y cambios fuera de alcance.</li>
+        <li>Es especialmente útil cuando hay paralelismo real o recuperación tras interrupciones.</li>
+      </ul>
+    </div></article>
+    <article class="card card-border bg-base-100"><div class="card-body">
+      <h2 class="card-title text-error">Contras</h2>
+      <ul class="list-disc space-y-2 pl-5">
+        <li>El runtime se convierte en otra fuente de bugs y falsos positivos.</li>
+        <li>Explore/snapshot/plan por LLM duplican razonamiento que Pi ya realizó.</li>
+        <li>Planificar consume varias llamadas y revisiones antes de producir código.</li>
+        <li>Ownership literal es frágil; los globs parecen válidos pero no lo son.</li>
+        <li>Los follow-ups sobre cambios staged no pueden partir de HEAD en worktrees.</li>
+        <li>Los workers se auto-revisan; no reemplazan una revisión independiente.</li>
+        <li>Artifacts y sesiones pueden acumular ruido o contexto incorrecto.</li>
+      </ul>
+    </div></article>
+  </section>
+
+  <section class="mt-8 card card-border bg-base-100 verdict"><div class="card-body">
+    <div class="badge badge-warning">Recomendación</div>
+    <h2 class="card-title text-3xl">Arquitectura híbrida: skill + runtime delgado + hooks</h2>
+    <p class="text-lg">No convertir todo SLAD en un skill. Tampoco dejar toda la lógica dentro del CLI. Separar razonamiento, orquestación y enforcement.</p>
+    <div class="mt-3 grid gap-4 md:grid-cols-3">
+      <div class="rounded-box bg-base-200 p-5"><h3 class="font-bold text-primary">1. Skill</h3><p class="mt-2">Decide cuándo usar SLAD, guía explore/snapshot/plan y aplica checklist de aprobación. Es política y conocimiento, no enforcement.</p></div>
+      <div class="rounded-box bg-base-200 p-5"><h3 class="font-bold text-secondary">2. Workflow / CLI delgado</h3><p class="mt-2">Valida un plan ya creado, firma aprobación, agenda DAG, gestiona worktrees, manifests, resume y artifacts. Debe ser determinista.</p></div>
+      <div class="rounded-box bg-base-200 p-5"><h3 class="font-bold text-accent">3. Hooks</h3><p class="mt-2">Guardas pre/post: baseline, paths exactos, porcelain <code>-z</code>, diff check, tests y no mutación. Fallan rápido y sin LLM.</p></div>
+    </div>
+  </div></section>
+
+  <section class="mt-8 card card-border bg-base-100"><div class="card-body">
+    <h2 class="card-title text-2xl">Comparación de alternativas</h2>
+    <div class="overflow-x-auto rounded-box border border-base-content/10">
+      <table class="table table-zebra">
+        <thead><tr><th>Opción</th><th>Control</th><th>Costo</th><th>Flexibilidad</th><th>Veredicto</th></tr></thead>
+        <tbody>
+          <tr><td>Pi directo</td><td>Medio</td><td>Bajo</td><td>Alta</td><td>Mejor para cambios pequeños</td></tr>
+          <tr><td>SLAD actual end-to-end</td><td>Alto en teoría, medio hoy</td><td>Alto</td><td>Media</td><td>Solo para pilotos y trabajo complejo</td></tr>
+          <tr><td>Solo skill</td><td>Bajo</td><td>Bajo</td><td>Alta</td><td>No basta: no aplica ownership ni recuperación</td></tr>
+          <tr><td>Solo hooks</td><td>Alto en fronteras</td><td>Bajo</td><td>Baja</td><td>No agenda DAG ni workers</td></tr>
+          <tr class="font-bold"><td>Híbrido recomendado</td><td>Alto</td><td>Medio</td><td>Alta</td><td><span class="badge badge-success">Mejor equilibrio</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div></section>
+
+  <section class="mt-8 card card-border bg-base-100"><div class="card-body">
+    <h2 class="card-title text-2xl">Workflow objetivo</h2>
+    <ul class="steps steps-vertical lg:steps-horizontal w-full">
+      <li class="step step-primary">Pi explora y planifica una vez</li>
+      <li class="step step-primary">SLAD valida plan canónico</li>
+      <li class="step step-primary">Aprobación por hash</li>
+      <li class="step step-primary">Runtime ejecuta DAG</li>
+      <li class="step step-primary">Hooks verifican</li>
+      <li class="step step-primary">Reviewer independiente</li>
+      <li class="step step-primary">Learn opcional</li>
+    </ul>
+    <div class="alert alert-info mt-6"><span><strong>Regla práctica:</strong> usar SLAD si hay ≥3 tareas, paralelismo real, ownership sensible, necesidad de recovery o evidencia auditable. En caso contrario, Pi directo + checks.</span></div>
+  </div></section>
+
+  <footer class="py-8 text-center text-sm opacity-60">Fuente visual: DaisyUI/Tailwind fallback, porque el repositorio SLAD no contiene un sistema visual de producto activo.</footer>
+</main>
+</body>
+</html>

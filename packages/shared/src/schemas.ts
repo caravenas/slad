@@ -738,6 +738,59 @@ export const DebateResult = z.object({
 });
 export type DebateResult = z.infer<typeof DebateResult>;
 
+export const DoctorStatus = z.enum(["healthy", "warning", "blocked"]);
+export type DoctorStatus = z.infer<typeof DoctorStatus>;
+
+export const DoctorCheck = z.object({
+  name: z.string().min(1),
+  status: DoctorStatus,
+  message: z.string().min(1),
+  blocking: z.boolean(),
+  evidence: z.array(z.string().min(1)).optional(),
+  recommendation: z.string().min(1).optional(),
+});
+export type DoctorCheck = z.infer<typeof DoctorCheck>;
+
+export const DoctorSummary = z.object({
+  passed: z.number().int().nonnegative(),
+  warnings: z.number().int().nonnegative(),
+  blockers: z.number().int().nonnegative(),
+});
+export type DoctorSummary = z.infer<typeof DoctorSummary>;
+
+export const DoctorReport = z.object({
+  status: DoctorStatus,
+  summary: DoctorSummary,
+  checks: z.array(DoctorCheck),
+}).superRefine((report, ctx) => {
+  const summary = {
+    passed: report.checks.filter((check) => check.status === "healthy").length,
+    warnings: report.checks.filter((check) => check.status === "warning").length,
+    blockers: report.checks.filter((check) => check.status === "blocked").length,
+  };
+
+  for (const key of ["passed", "warnings", "blockers"] as const) {
+    if (report.summary[key] !== summary[key]) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `summary.${key} must equal the number of ${key} checks`,
+        path: ["summary", key],
+      });
+    }
+  }
+
+  const expectedStatus: DoctorStatus =
+    summary.blockers > 0 ? "blocked" : summary.warnings > 0 ? "warning" : "healthy";
+  if (report.status !== expectedStatus) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `status must be ${expectedStatus} for the check summary`,
+      path: ["status"],
+    });
+  }
+});
+export type DoctorReport = z.infer<typeof DoctorReport>;
+
 export const RunOutput = z.object({
   taskId: TaskId,
   status: z.enum(["completed", "blocked", "failed", "awaiting_human"]),

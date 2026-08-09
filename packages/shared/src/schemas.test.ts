@@ -1,4 +1,7 @@
 import {
+  DoctorCheck,
+  DoctorReport,
+  DoctorStatus,
   PlanApprovalStatus,
   PlanArtifactEnvelope,
   RunOutput,
@@ -202,6 +205,110 @@ describe("SlashCommand", () => {
     assert.equal(parsed.config.requiresWorkspaceTrust, true);
     assert.equal(parsed.config.requiresProvider, true);
     assert.equal(parsed.config.requiresPlan, true);
+  });
+});
+
+describe("Doctor contract", () => {
+  const healthyCheck = {
+    name: "git",
+    status: "healthy",
+    message: "Git is available.",
+    blocking: false,
+  };
+
+  it("accepts only the canonical doctor statuses", () => {
+    assert.deepEqual(DoctorStatus.options, ["healthy", "warning", "blocked"]);
+    assert.equal(DoctorStatus.safeParse("healthy").success, true);
+    assert.equal(DoctorStatus.safeParse("warning").success, true);
+    assert.equal(DoctorStatus.safeParse("blocked").success, true);
+    assert.equal(DoctorStatus.safeParse("failed").success, false);
+  });
+
+  it("requires the core doctor check fields and accepts optional evidence", () => {
+    const parsed = DoctorCheck.parse({
+      ...healthyCheck,
+      evidence: ["git version 2.50.1"],
+      recommendation: "Install git if this check fails.",
+    });
+
+    assert.equal(parsed.name, "git");
+    assert.equal(parsed.status, "healthy");
+    assert.deepEqual(parsed.evidence, ["git version 2.50.1"]);
+    assert.equal(parsed.recommendation, "Install git if this check fails.");
+
+    for (const field of ["name", "status", "message", "blocking"] as const) {
+      const invalid: Record<string, unknown> = { ...healthyCheck };
+      delete invalid[field];
+
+      assert.equal(DoctorCheck.safeParse(invalid).success, false, `${field} should be required`);
+    }
+  });
+
+  it("validates reports with matching summary aggregation and overall status", () => {
+    const parsed = DoctorReport.parse({
+      status: "blocked",
+      summary: {
+        passed: 1,
+        warnings: 1,
+        blockers: 1,
+      },
+      checks: [
+        healthyCheck,
+        {
+          name: "tmux",
+          status: "warning",
+          message: "tmux is not installed; child-process fallback will be used.",
+          blocking: false,
+        },
+        {
+          name: "workspace",
+          status: "blocked",
+          message: "Workspace is not writable.",
+          blocking: true,
+        },
+      ],
+    });
+
+    assert.equal(parsed.summary.passed, 1);
+    assert.equal(parsed.summary.warnings, 1);
+    assert.equal(parsed.summary.blockers, 1);
+    assert.equal(parsed.status, "blocked");
+  });
+
+  it("rejects reports with invalid summary counts or aggregate status", () => {
+    assert.equal(
+      DoctorReport.safeParse({
+        status: "healthy",
+        summary: {
+          passed: 1,
+          warnings: 0,
+          blockers: 0,
+        },
+        checks: [
+          healthyCheck,
+          {
+            name: "tmux",
+            status: "warning",
+            message: "tmux is not installed; child-process fallback will be used.",
+            blocking: false,
+          },
+        ],
+      }).success,
+      false,
+    );
+
+    assert.equal(
+      DoctorReport.safeParse({
+        status: "warning",
+        summary: {
+          passed: 1,
+          warnings: 1,
+          blockers: 0,
+        },
+        checks: [healthyCheck],
+      }).success,
+      false,
+    );
   });
 });
 

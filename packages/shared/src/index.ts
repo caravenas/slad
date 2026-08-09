@@ -5,6 +5,10 @@ export {
   AGENT_CATALOG,
   AgentDescriptor,
   DEFAULT_AGENT_ID,
+  DoctorCheck,
+  DoctorReport,
+  DoctorStatus,
+  DoctorSummary,
   PipelineStageName,
   SLASH_COMMAND_CATALOG,
   SlashCommand,
@@ -25,6 +29,10 @@ export {
 } from "./schemas.js";
 export type {
   AgentDescriptor as AgentDescriptorType,
+  DoctorCheck as DoctorCheckType,
+  DoctorReport as DoctorReportType,
+  DoctorStatus as DoctorStatusType,
+  DoctorSummary as DoctorSummaryType,
   PipelineStageName as PipelineStageNameType,
   SlashCommand as SlashCommandType,
   SlashCommandArg as SlashCommandArgTypeValue,

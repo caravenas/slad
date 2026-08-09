@@ -44,6 +44,9 @@ To pick defaults explicitly, run `slad model`, or pass `--agent` / `-m` per run.
 ```bash
 cd your-project
 
+# Read-only environment diagnosis: no repairs, no agents, no LLM calls
+slad doctor
+
 # Sanity check: one round-trip through the auto-detected backend
 slad ask "what does this repo do?"
 
@@ -60,7 +63,24 @@ slad pipeline run --parallel
 
 ## Use cases
 
-### 1. Plan first, review, then execute in parallel
+### 1. Diagnose the local setup before running agents
+
+```bash
+slad doctor
+slad doctor --json
+```
+
+`slad doctor` is a read-only diagnostic for the local SLAD workspace and runtime prerequisites.
+It inspects configuration, repository/runtime state, backend availability, and other checks needed before agent execution, then prints either human-readable output or the shared JSON report.
+It never repairs state, writes files, mutates git, invokes agent CLIs, or calls LLM/model APIs.
+Use it to decide what a human should fix before `ask`, `auto`, or `run`.
+
+The JSON report has a top-level `status`, a `summary`, and a `checks` array.
+Statuses are `healthy` when all checks pass, `warning` when execution can continue but a non-critical issue was found, and `blocked` when at least one required prerequisite is missing or invalid.
+The `summary` counts check outcomes as `passed`, `warnings`, and `blockers`; these counts are derived from the `checks` array.
+`slad doctor` exits with code `0` for `healthy` and `warning`, and exits non-zero for `blocked` or an internal doctor error.
+
+### 2. Plan first, review, then execute in parallel
 
 ```bash
 slad pipeline auto "migrate the config module from JSON to TOML" --dry-run
@@ -78,7 +98,7 @@ If a cross-agent memory entry exists for the repo (`~/.agents/memory/projects/<r
 Worker prompts, transcripts, and exit codes land under `.slad-os/sessions/<id>/tasks/<taskId>/`.
 Every `auto`, `run`, and parallel run also maintains an atomic, schema-validated manifest at `.slad-os/runs/<runId>/manifest.json`, correlated by `traceId`.
 
-### 2. Isolated execution with git worktrees
+### 3. Isolated execution with git worktrees
 
 ```bash
 slad pipeline run --parallel --worktrees
@@ -90,7 +110,7 @@ Successful tasks are committed in their worktree and merged sequentially — dep
 At the end the result is squashed into your main worktree as staged, uncommitted changes; your branch gets no commits.
 Requires a committed HEAD; add `--keep-worktrees` to inspect the session worktrees afterwards.
 
-### 3. Enforce the plan's file ownership
+### 4. Enforce the plan's file ownership
 
 ```bash
 slad pipeline run --parallel --strict-ownership
@@ -101,7 +121,7 @@ By default violations are warnings recorded in the run report; with `--strict-ow
 The same git comparison catches the inverse fraud: a task that reports `completed` (or claims `changedFiles`) with zero git changes behind it is flagged as `phantom-completion` — warning by default, task failure under `--strict-ownership`.
 Worker-reported results are never trusted without git evidence.
 
-### 4. Choose backend and model per run
+### 5. Choose backend and model per run
 
 ```bash
 slad pipeline run --parallel --agent claude -m sonnet
@@ -113,7 +133,7 @@ slad pipeline auto "..." --agent codex
 With pi, prefer provider-qualified model ids (`openai-codex/gpt-5.5`, `google/gemini-3-flash-preview`) — bare names fuzzy-match across pi's providers.
 Persistent defaults live in `~/.slad/config.json` (managed by `slad model`) or per-project in `.slad-os/config.json`.
 
-### 5. Quick answers and conversational mode
+### 6. Quick answers and conversational mode
 
 ```bash
 slad ask "why would pnpm hoist this dependency?"
@@ -122,7 +142,7 @@ slad chat        # REPL: /explore, /plan, /run T2, /auto ... as slash commands
 
 Both spawn the configured backend directly — no pipeline, no session required for `ask`.
 
-### 6. Close the loop: learn and evolve
+### 7. Close the loop: learn and evolve
 
 ```bash
 slad pipeline learn    # extract decisions, errors, and patterns from the session's run reports
@@ -142,6 +162,7 @@ Top level:
 | `slad ask <question>` | Direct answer from the backend, no pipeline |
 | `slad chat` | Conversational REPL with slash commands |
 | `slad model` | Configure default backend, binary, and model |
+| `slad doctor` | Read-only diagnosis of local SLAD prerequisites; no repairs, agents, or LLM calls |
 | `slad gate --schema <path> --input <path>` | Validate external JSON against JSON Schema 2020-12 |
 | `slad launch-spec` | Print the canonical backend launch policy as JSON |
 | `slad stats` | Session/run/learning totals for the project |
