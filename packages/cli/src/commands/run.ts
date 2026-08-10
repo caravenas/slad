@@ -27,6 +27,7 @@ import {
   updateRunManifest,
   type RunManifestHandle,
 } from "../persistence/manifest.js";
+import { loadLifecycleHooks, runPostLifecycleHooks, runPreLifecycleHooks } from "../core/lifecycle-hooks.js";
 
 export interface RunOpts {
   input?: string;
@@ -133,6 +134,21 @@ export async function applyRunAction(runId: string, cwd: string = process.cwd())
     return;
   }
 
+  const hooks = loadLifecycleHooks(cwd);
+  try {
+    await runPreLifecycleHooks(hooks, "pre-apply", {
+      event: "pre-apply",
+      command: "apply",
+      cwd,
+      runId,
+      integration,
+    });
+  } catch (err) {
+    log.error((err as Error).message);
+    process.exitCode = 1;
+    return;
+  }
+
   const error = await applyIntegrationBranch(cwd, {
     branch: integration.branch,
     baseRef: integration.baseRef,
@@ -149,6 +165,13 @@ export async function applyRunAction(runId: string, cwd: string = process.cwd())
   if (!handle.value.worktrees.keep) {
     await removeSessionWorktrees(cwd, handle.value.sessionId);
   }
+  await runPostLifecycleHooks(hooks, "post-apply", {
+    event: "post-apply",
+    command: "apply",
+    cwd,
+    runId,
+    status: "applied",
+  });
   log.success(`Run ${runId} aplicado: el resultado quedó staged en el worktree principal, sin commits.`);
   log.dim("  Revisá con `git diff --cached` y commiteá cuando estés conforme.");
 }
@@ -259,6 +282,8 @@ export async function runCommand(opts: RunOpts): Promise<void> {
   const providerName = resolveProvider(opts.provider, opts.agent, config.defaultProvider, config.defaultAgent);
   const selectedModel = opts.model ?? getModel(providerName);
   const parsedPlan = PlanOutput.parse(planInput);
+  const taskById = new Map(parsedPlan.tasks.map((task) => [task.id, task]));
+  const hooks = loadLifecycleHooks(cwd);
 
   // --from-review: the follow-up plan runs on top of the parent run's not-yet-
   // applied integration. All guards resolve before any manifest is created.
@@ -290,6 +315,21 @@ export async function runCommand(opts: RunOpts): Promise<void> {
       return;
     }
     fromIntegration = { ref: parentIntegration.tip, baseRef: parentIntegration.baseRef };
+  }
+
+  try {
+    await runPreLifecycleHooks(hooks, "pre-run", {
+      event: "pre-run",
+      command: "run",
+      cwd,
+      sessionId: session.id,
+      intent,
+      plan: parsedPlan,
+    });
+  } catch (err) {
+    log.error((err as Error).message);
+    process.exitCode = 1;
+    return;
   }
 
   await interruptStaleRunManifests(session.id, cwd);
@@ -349,6 +389,17 @@ export async function runCommand(opts: RunOpts): Promise<void> {
           currentSession = appendArtifact(currentSession, "run", ref.path);
           saveSession(currentSession);
         }
+        const task = taskById.get(output.taskId);
+        if (task) {
+          await runPostLifecycleHooks(hooks, "post-task", {
+            event: "post-task",
+            command: "run",
+            cwd,
+            sessionId: session.id,
+            task,
+            output,
+          });
+        }
       },
     });
 
@@ -384,6 +435,13 @@ export async function runCommand(opts: RunOpts): Promise<void> {
     } else {
       await completeRunManifest(manifest, parallelResult.status);
     }
+    await runPostLifecycleHooks(hooks, "post-run", {
+      event: "post-run",
+      command: "run",
+      cwd,
+      sessionId: session.id,
+      status: parallelResult.status,
+    });
     if (parallelResult.status === "failed") process.exitCode = 1;
     return;
   }
@@ -469,6 +527,17 @@ export async function runCommand(opts: RunOpts): Promise<void> {
             currentSession = appendArtifact(currentSession, "run", ref.path);
             saveSession(currentSession);
           }
+          const task = taskById.get(output.taskId);
+          if (task) {
+            await runPostLifecycleHooks(hooks, "post-task", {
+              event: "post-task",
+              command: "run",
+              cwd,
+              sessionId: session.id,
+              task,
+              output,
+            });
+          }
         }
       } else {
         const ref = await writeArtifact(stage as any, artifact as any, { sessionId: session?.id ?? "adhoc" });
@@ -516,6 +585,13 @@ export async function runCommand(opts: RunOpts): Promise<void> {
       : "failed",
     result.status === "failed" ? result.errors.join("; ") : undefined,
   );
+  await runPostLifecycleHooks(hooks, "post-run", {
+    event: "post-run",
+    command: "run",
+    cwd,
+    sessionId: session.id,
+    status: result.status,
+  });
 
   if (opts.json) {
     console.log(JSON.stringify(result.outputs["run"], null, 2));
@@ -529,6 +605,13 @@ export async function runCommand(opts: RunOpts): Promise<void> {
       "failed",
       error instanceof Error ? error.message : String(error),
     );
+    await runPostLifecycleHooks(hooks, "post-run", {
+      event: "post-run",
+      command: "run",
+      cwd,
+      sessionId: session.id,
+      status: "failed",
+    });
     throw error;
   }
 }

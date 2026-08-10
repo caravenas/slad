@@ -72,6 +72,24 @@ describe("run review actions", () => {
     assert.equal((await readRunManifest(manifestPath)).value.status, "applied");
   });
 
+  it("apply stops before touching git when a pre-apply hook denies", async () => {
+    const { branch, manifestPath } = await pendingRun("s1h", "run_apply_hook");
+    const hookPath = path.join(cwd, "deny-apply.mjs");
+    writeFileSync(hookPath, "export default () => ({ allow: false, reason: 'nope' });\n");
+    const configDir = path.join(cwd, ".slad-os");
+    writeFileSync(
+      path.join(configDir, "config.json"),
+      JSON.stringify({ lifecycleHooks: { preApply: ["./deny-apply.mjs"] } }),
+    );
+
+    await applyRunAction("run_apply_hook", cwd);
+
+    assert.equal(process.exitCode, 1);
+    assert.equal(git(cwd, "diff", "--cached", "--name-only"), "");
+    assert.equal(branchExists(cwd, branch), true);
+    assert.equal((await readRunManifest(manifestPath)).value.status, "review_pending");
+  });
+
   it("abort deletes integration refs without touching main and marks aborted", async () => {
     const { branch, manifestPath } = await pendingRun("s2", "run_abort");
 

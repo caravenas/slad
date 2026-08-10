@@ -1053,6 +1053,31 @@ export const SladProfile = z.object({
 });
 export type SladProfile = z.infer<typeof SladProfile>;
 
+export const LifecyclePreHookResult = z.object({
+  allow: z.boolean(),
+  reason: z.string().min(1).optional(),
+  note: z.string().min(1).optional(),
+}).superRefine((result, ctx) => {
+  if (!result.allow && !result.reason) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "reason is required when allow is false",
+      path: ["reason"],
+    });
+  }
+});
+export type LifecyclePreHookResult = z.infer<typeof LifecyclePreHookResult>;
+
+export const LifecycleHooksSettings = z.object({
+  prePlan: z.array(z.string().min(1)).default([]),
+  preRun: z.array(z.string().min(1)).default([]),
+  postTask: z.array(z.string().min(1)).default([]),
+  postRun: z.array(z.string().min(1)).default([]),
+  preApply: z.array(z.string().min(1)).default([]),
+  postApply: z.array(z.string().min(1)).default([]),
+});
+export type LifecycleHooksSettings = z.infer<typeof LifecycleHooksSettings>;
+
 export const SladHarnessSettings = z.object({
   mode: z.enum(["off", "on", "strict"]).default("on"),
   maxPermission: z.enum(["read", "workspace", "full"]).default("workspace"),
@@ -1081,6 +1106,7 @@ export const SladSettings = z.object({
     models: z.record(ProviderName, z.string()).default({}),
   }).default({}),
   harness: SladHarnessSettings.default({}),
+  lifecycleHooks: LifecycleHooksSettings.default({}),
   paths: z.object({
     docsPath: z.string().default("docs"),
     wikiPath: z.string().optional(),

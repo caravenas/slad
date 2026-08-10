@@ -58,7 +58,7 @@ export function writeGlobalConfigPatch(
   return next;
 }
 
-function settingsValue<T = unknown>(pathParts: string[], cwd = process.env.SLAD_WORKSPACE ?? process.cwd()): T | undefined {
+export function settingsValue<T = unknown>(pathParts: string[], cwd = process.env.SLAD_WORKSPACE ?? process.cwd()): T | undefined {
   const globalOnlyKeys = new Set(["activeProfileId", "activeAgentId"]);
   const files = [
     getGlobalConfigPath(),

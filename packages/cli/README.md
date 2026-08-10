@@ -114,6 +114,20 @@ Configuración de proyecto:
 - `ProjectConfig` incluye `docsPath` (default `docs`).
 - `SLAD_DOCS_PATH` puede sobreescribir `docsPath`.
 
+Lifecycle hooks son opt-in en `~/.slad/config.json` o `.slad-os/config.json`.
+Cada ruta carga un módulo local que exporta `default` o `hook`.
+Los hooks `prePlan`, `preRun` y `preApply` pueden devolver `{ "allow": false, "reason": "..." }` para bloquear antes del efecto.
+Los hooks `postTask`, `postRun` y `postApply` solo observan; sus errores se registran como warning.
+
+```json
+{
+  "lifecycleHooks": {
+    "preRun": ["./scripts/pre-run.mjs"],
+    "postTask": ["./scripts/post-task.mjs"]
+  }
+}
+```
+
 ## Harness de ejecución
 
 El arnés de seguridad está habilitado y soporta modos:

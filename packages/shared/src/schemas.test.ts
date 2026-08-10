@@ -4,6 +4,8 @@ import {
   DoctorStatus,
   EXTERNAL_PLAN_KIND,
   ExternalPlanDocument,
+  LifecycleHooksSettings,
+  LifecyclePreHookResult,
   PlanApprovalStatus,
   PlanArtifactEnvelope,
   RunManifest,
@@ -209,6 +211,22 @@ describe("SlashCommand", () => {
     assert.equal(parsed.config.requiresWorkspaceTrust, true);
     assert.equal(parsed.config.requiresProvider, true);
     assert.equal(parsed.config.requiresPlan, true);
+  });
+});
+
+describe("Lifecycle hooks contract", () => {
+  it("defaults to disabled hooks and requires deny reasons", () => {
+    assert.deepEqual(LifecycleHooksSettings.parse({}), {
+      prePlan: [],
+      preRun: [],
+      postTask: [],
+      postRun: [],
+      preApply: [],
+      postApply: [],
+    });
+    assert.equal(LifecyclePreHookResult.safeParse({ allow: true }).success, true);
+    assert.equal(LifecyclePreHookResult.safeParse({ allow: false }).success, false);
+    assert.equal(LifecyclePreHookResult.safeParse({ allow: false, reason: "blocked" }).success, true);
   });
 });
 

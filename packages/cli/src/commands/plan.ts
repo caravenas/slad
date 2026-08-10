@@ -37,6 +37,7 @@ import {
   printPlanPreflight,
 } from "../core/plan-preflight.js";
 import { importExternalPlanFromFile } from "../core/plan-import.js";
+import { loadLifecycleHooks, runPreLifecycleHooks } from "../core/lifecycle-hooks.js";
 
 export interface PlanOpts {
   input?: string;
@@ -286,7 +287,22 @@ async function importPlanCommand(opts: PlanOpts): Promise<void> {
 }
 
 export async function planCommand(opts: PlanOpts): Promise<void> {
+  const cwd = process.cwd();
+
   if (opts.import) {
+    try {
+      const hooks = loadLifecycleHooks(cwd);
+      await runPreLifecycleHooks(hooks, "pre-plan", {
+        event: "pre-plan",
+        command: "plan",
+        cwd,
+        importPath: opts.import,
+      });
+    } catch (err) {
+      log.error((err as Error).message);
+      process.exitCode = 1;
+      return;
+    }
     await importPlanCommand(opts);
     return;
   }
@@ -388,6 +404,22 @@ export async function planCommand(opts: PlanOpts): Promise<void> {
 
   if (!opts.input && session) {
     log.dim(`  sesión: usando snapshot en ${inputPath}`);
+  }
+
+  try {
+    const hooks = loadLifecycleHooks(cwd);
+    await runPreLifecycleHooks(hooks, "pre-plan", {
+      event: "pre-plan",
+      command: "plan",
+      cwd,
+      input: inputPath,
+      sessionId: session?.id,
+      intent: session?.intent,
+    });
+  } catch (err) {
+    log.error((err as Error).message);
+    process.exitCode = 1;
+    return;
   }
 
   const config = loadConfig();
