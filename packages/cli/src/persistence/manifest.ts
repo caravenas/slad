@@ -101,11 +101,163 @@ export async function readRunManifest(
       status: "interrupted",
       terminalReason: "previous process ended before recording a terminal state",
       completedAt: new Date().toISOString(),
+      // Class B: nobody terminalized this run, so the manifest cannot be
+      // trusted to describe the integration branch. Never resumable.
+      recovery: { safe: false, reason: "uncaught" },
       stages: current.stages.map((stage) => stage.status === "running" ? { ...stage, status: "interrupted" } : stage),
       tasks: current.tasks.map((task) => task.status === "running" ? { ...task, status: "interrupted" } : task),
     }));
   }
   return handle;
+}
+
+// ─── Native interruption / resume helpers ────────────────────────────────────
+
+/**
+ * Records the integration branch *before* `setupIntegration` creates it, with
+ * `tip = baseRef`. Without this record-before-create, a class-B death between
+ * `worktree add -B` and the end of the run would leave a branch no command
+ * recognizes, and a later fresh run would delete it silently.
+ */
+export function recordIntegration(
+  handle: RunManifestHandle,
+  integration: RunManifestValue["worktrees"]["integration"],
+): Promise<RunManifestHandle> {
+  return updateRunManifest(handle, (current) => ({
+    ...current,
+    worktrees: { ...current.worktrees, integration },
+  }));
+}
+
+/**
+ * The durable per-task checkpoint (A1): exactly one manifest write, no
+ * artifact, no hashing, no hooks, no other I/O. Invoked right after the task's
+ * merge returns, inside the critical section — I0 (the manifest exactly
+ * describes the branch) may not depend on the artifact directory being
+ * writable, so nothing fallible is allowed to share this write.
+ *
+ * A task that merges nothing still checkpoints: it writes its status and
+ * re-writes the current tip.
+ */
+export function checkpointTaskIntegration(
+  handle: RunManifestHandle,
+  checkpoint: { taskId: string; status: RunManifestValue["tasks"][number]["status"]; integrationTip?: string },
+): Promise<RunManifestHandle> {
+  return updateRunManifest(handle, (current) => ({
+    ...current,
+    tasks: current.tasks.map((task) => task.taskId === checkpoint.taskId
+      ? { ...task, status: checkpoint.status }
+      : task),
+    worktrees: checkpoint.integrationTip && current.worktrees.integration
+      ? {
+        ...current.worktrees,
+        integration: { ...current.worktrees.integration, tip: checkpoint.integrationTip },
+      }
+      : current.worktrees,
+  }));
+}
+
+/**
+ * Durably reserves one worker dispatch (A3) in a single manifest write, and
+ * marks the task `running`. Called immediately before the real spawn and after
+ * the task workspace is ready, so the counter is an upper bound on started
+ * executions — never below, which is the dangerous direction.
+ */
+export function reserveTaskDispatch(
+  handle: RunManifestHandle,
+  reservation: { taskId: string; worktree?: string },
+): Promise<RunManifestHandle> {
+  return updateRunManifest(handle, (current) => ({
+    ...current,
+    policy: {
+      strictOwnership: current.policy?.strictOwnership ?? false,
+      taskDispatches: (current.policy?.taskDispatches ?? 0) + 1,
+    },
+    tasks: current.tasks.map((task) => task.taskId === reservation.taskId
+      ? { ...task, status: "running" as const, ...(reservation.worktree ? { worktree: reservation.worktree } : {}) }
+      : task),
+  }));
+}
+
+/**
+ * Class-A terminalization: the run ended through a caught signal, so the
+ * manifest is exact by construction and the run is natively resumable.
+ * Tasks still `running` never produced a checkpoint and go back on the table.
+ */
+export function markRunInterrupted(
+  handle: RunManifestHandle,
+  options: { signal: "SIGINT" | "SIGTERM"; hasIntegration: boolean },
+): Promise<RunManifestHandle> {
+  const completedAt = new Date().toISOString();
+  return updateRunManifest(handle, (current) => ({
+    ...current,
+    // Nothing merged means nothing to review or resume: the run is simply
+    // cancelled and its worktrees were cleaned.
+    status: options.hasIntegration ? "interrupted" : "cancelled",
+    completedAt,
+    terminalReason: `run interrumpido por ${options.signal}`,
+    recovery: options.hasIntegration
+      ? { safe: true, reason: "signal" as const, signal: options.signal }
+      : undefined,
+    stages: current.stages.map((stage) => stage.status === "running" ? { ...stage, status: "interrupted" } : stage),
+    tasks: current.tasks.map((task) => task.status === "running" ? { ...task, status: "interrupted" } : task),
+  }));
+}
+
+/**
+ * Class-B terminalization from inside the live process: a durable write the
+ * run depends on failed, so the manifest no longer describes the branch.
+ * Never `safe: true` — the class-A marker asserts exactness, and here there is
+ * none.
+ */
+export function markRunUnrecoverable(
+  handle: RunManifestHandle,
+  terminalReason: string,
+): Promise<RunManifestHandle> {
+  const completedAt = new Date().toISOString();
+  return updateRunManifest(handle, (current) => ({
+    ...current,
+    status: "interrupted",
+    completedAt,
+    terminalReason: terminalReason.slice(0, 400),
+    recovery: { safe: false, reason: "uncaught" },
+    stages: current.stages.map((stage) => stage.status === "running" ? { ...stage, status: "interrupted" } : stage),
+    tasks: current.tasks.map((task) => task.status === "running" ? { ...task, status: "interrupted" } : task),
+  }));
+}
+
+/** Statuses in which a run's outcome has already been decided by a human or by the run itself. */
+const TERMINAL_STATUSES: RunManifestValue["status"][] = [
+  "completed", "partial", "failed", "cancelled", "applied", "aborted",
+];
+
+export function isTerminalRunStatus(status: RunManifestValue["status"]): boolean {
+  return TERMINAL_STATUSES.includes(status);
+}
+
+/** Every readable manifest of a session, newest first. */
+export async function listSessionRunManifests(
+  sessionId: string,
+  cwd: string = process.cwd(),
+): Promise<RunManifestHandle[]> {
+  const runsDir = path.join(cwd, ".slad-os", "runs");
+  let entries: string[];
+  try {
+    entries = await readdir(runsDir);
+  } catch {
+    return [];
+  }
+  const handles: RunManifestHandle[] = [];
+  for (const runId of entries) {
+    try {
+      const handle = await readRunManifest(path.join(runsDir, runId, "manifest.json"));
+      if (handle.value.sessionId === sessionId) handles.push(handle);
+    } catch (error) {
+      if (error instanceof ParseError) continue;
+      throw error;
+    }
+  }
+  return handles.sort((a, b) => b.value.startedAt.localeCompare(a.value.startedAt));
 }
 
 export async function interruptStaleRunManifests(

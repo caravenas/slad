@@ -183,6 +183,11 @@ slad pipeline run --parallel --bypass   # override explícito si necesitás ejec
 `--worktrees` requiere `--parallel`, un HEAD commiteado y un worktree principal limpio; cambios sin commitear abortan el run antes de lanzar workers.
 El run termina `review_pending`: el resultado integrado queda en la rama de integración de la sesión (`slad/<sessionId>/...`) y el worktree principal no se toca.
 Usá `slad pipeline run --review <runId>` para inspeccionar, `--apply <runId>` para dejar un único squash staged, `--abort <runId>` para limpiar la integración, o `--from-review <runId>` para continuar desde ese tip.
+Si interrumpís con `Ctrl-C` o `SIGTERM`, SLAD deja terminar la ola en curso, marca el run `interrupted` y registra si quedó `recovery.safe`.
+Cuando ese marcador es `true`, reanudá con `slad pipeline run --resume <runId>`: las tareas ya merged se saltean y la cadena conserva el mismo budget/ownership policy.
+Si el proceso muere sin handler (`SIGKILL`, crash, segundo `Ctrl-C`), el run no es reanudable de forma nativa: revisalo con `--review` y elegí `--apply` o `--abort`.
+Un run fresco en worktrees rechaza residuo de la sesión en vez de limpiarlo solo; lo mismo hacen `--resume`, `--apply` y `--abort` si ven workers vivos o un lock tomado.
+Los escapes son explícitos: `--force-unlock <runId>` para un lock huérfano ya verificado y `--assume-workers-dead` para borrar sentinels sólo después de verificar y matar esos workers.
 
 Tests (`node:test`):
 

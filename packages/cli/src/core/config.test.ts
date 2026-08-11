@@ -84,4 +84,34 @@ describe("config", () => {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
+
+  it("respeta un SLAD_CLI_BINARY explícito aunque haya defaultAgent configurado", () => {
+    const savedKeys = [
+      "SLAD_CLI_BINARY", "SLAD_CLI_ARGS", "SLAD_CLI_PROMPT_MODE", "SLAD_CLI_MODEL_ARG",
+      "SLAD_DEFAULT_AGENT", "SLAD_DEFAULT_PROVIDER", "CLI_MODEL",
+    ];
+    const saved = Object.fromEntries(savedKeys.map((k) => [k, process.env[k]]));
+
+    try {
+      process.env.SLAD_CLI_BINARY = "/tmp/fake-agent";
+      process.env.SLAD_CLI_ARGS = "--stdin";
+      process.env.SLAD_CLI_PROMPT_MODE = "stdin";
+      process.env.SLAD_CLI_MODEL_ARG = "";
+      process.env.SLAD_DEFAULT_AGENT = "";
+      process.env.SLAD_DEFAULT_PROVIDER = "";
+      process.env.CLI_MODEL = "";
+
+      const provider = resolveProvider(undefined, undefined, "cli", "claude");
+
+      assert.equal(provider, "cli");
+      assert.equal(process.env.SLAD_CLI_BINARY, "/tmp/fake-agent");
+      assert.equal(process.env.SLAD_CLI_ARGS, "--stdin");
+      assert.equal(process.env.SLAD_CLI_PROMPT_MODE, "stdin");
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
 });

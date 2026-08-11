@@ -129,8 +129,13 @@ Successful tasks are committed in their worktree and merged sequentially — dep
 At the end the result stays on the session integration branch and the run manifest is marked `review_pending`; your main worktree is not touched.
 Use `slad pipeline run --review <runId>` to inspect it, `--apply <runId>` to squash it into the main worktree as staged, uncommitted changes, or `--abort <runId>` to discard the integration branch without touching main.
 Use `slad pipeline run --parallel --worktrees --from-review <runId>` to run a follow-up plan from the pending integration tip.
+If you press `Ctrl-C` (or send `SIGTERM`) during a worktree run, SLAD lets the in-flight wave unwind, marks the run `interrupted`, and records whether the manifest is safe to resume.
+When `slad pipeline run --review <runId>` shows `recovery.safe: true`, continue exactly once with `slad pipeline run --resume <runId>`; completed tasks are skipped and the chain keeps its original ownership policy and dispatch budget.
+Hard crashes (`SIGKILL`, process crash, second `Ctrl-C`) are diagnosed but not resumable: inspect with `--review`, then choose `--apply` or `--abort` yourself.
 Worktree mode requires `--parallel`, a committed HEAD, and a clean main worktree — uncommitted changes abort the run before any worker starts.
 `--apply` only proceeds when the main worktree is still clean, its HEAD still matches the recorded base, and the integration branch still matches the recorded tip.
+Fresh `run --parallel --worktrees` refuses while the session still has review/interrupted residue, live-worker sentinels, or a held session lock; SLAD never auto-deletes ambiguous session state.
+If a dead process left stale guards behind, use `--force-unlock <runId>` only after verifying the lock holder died, and `--assume-workers-dead` only after you personally verified and killed those workers.
 Add `--keep-worktrees` to always keep the session worktrees for inspection.
 
 ### 4. Enforce the plan's file ownership
@@ -216,6 +221,9 @@ Key flags for `run` / `run --parallel`:
 --apply <runId>       squash a review_pending run as staged changes on a clean unchanged main HEAD
 --abort <runId>       delete a review_pending run's integration refs without touching main
 --from-review <runId> continue from a review_pending integration tip (requires --parallel --worktrees)
+--resume <runId>      continue a class-A interrupted worktree run from its recorded integration tip
+--force-unlock <id>   take a stuck session lock only when you verified the recorded holder died
+--assume-workers-dead clear worker sentinels without sending signals (only after you verified they are gone)
 --strict-ownership    fail tasks that touch undeclared files
 --agent <name>        backend: claude | codex | pi | agy
 -m, --model <id>      model passed to the backend

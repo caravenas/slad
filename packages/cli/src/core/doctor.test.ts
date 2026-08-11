@@ -188,7 +188,7 @@ describe("runDoctor", () => {
     assert.equal(calls.find((call) => call.file === path.join(tmpDir, "pi") && call.args.join(" ") === "--version")?.timeoutMs, 800);
   });
 
-  it("usa 5000ms por defecto para comandos git/tmux y 800ms para versiones", async () => {
+  it("usa 15000ms por defecto para comandos git/tmux y 800ms para versiones", async () => {
     makeHealthyWorkspace();
     const { exec, calls } = makeExec(healthyGitAndTmux());
 
@@ -200,7 +200,7 @@ describe("runDoctor", () => {
     assert.ok(versionCalls.length > 0);
     assert.ok(commandCalls.length > 0);
     assert.ok(versionCalls.every((call) => call.timeoutMs === 800));
-    assert.ok(commandCalls.every((call) => call.timeoutMs === 5_000));
+    assert.ok(commandCalls.every((call) => call.timeoutMs === 15_000));
   });
 
   it("reporta manifests válidos, activos, interrumpidos y corruptos en modo read-only", async () => {

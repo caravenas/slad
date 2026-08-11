@@ -905,6 +905,37 @@ export const RunManifestIntegration = z.object({
 });
 export type RunManifestIntegration = z.infer<typeof RunManifestIntegration>;
 
+/**
+ * Policy and accounting a `run --resume` chain inherits from its parent.
+ * Optional on purpose: "absent" must stay distinguishable from "off", so a
+ * parent written before this field existed is rejected rather than silently
+ * resumed with the ownership gate disabled or the budget reset.
+ */
+export const RunManifestPolicy = z.object({
+  strictOwnership: z.boolean(),
+  /**
+   * Worker processes actually dispatched, accumulated across the whole resume
+   * chain. Monotonic: reserved durably right before each spawn, never
+   * recomputed and never decremented, so it is an upper bound on started
+   * executions (exact when the run ends through a caught signal).
+   */
+  taskDispatches: z.number().int().nonnegative().optional(),
+});
+export type RunManifestPolicy = z.infer<typeof RunManifestPolicy>;
+
+/**
+ * How the run ended, which decides whether it can be resumed natively.
+ * `safe: true` is written only by the caught-signal terminalizer: it asserts
+ * the manifest exactly describes the integration branch. Anything else —
+ * including a missing `recovery` on an older manifest — is not resumable.
+ */
+export const RunManifestRecovery = z.object({
+  safe: z.boolean(),
+  reason: z.enum(["signal", "uncaught"]),
+  signal: z.enum(["SIGINT", "SIGTERM"]).optional(),
+});
+export type RunManifestRecovery = z.infer<typeof RunManifestRecovery>;
+
 export const RunManifest = z.object({
   schemaVersion: z.literal(1),
   runId: z.string().min(1),
@@ -936,6 +967,12 @@ export const RunManifest = z.object({
     artifact: z.string().optional(),
     worktree: z.string().optional(),
     error: z.string().optional(),
+    /**
+     * Why this task's artifact could not be written; the task still completed.
+     * Completion is defined by the merge, not by the evidence file, so
+     * `artifacts[]` is never a signal of completeness.
+     */
+    artifactError: z.string().max(400).optional(),
   })).default([]),
   artifacts: z.array(z.object({
     kind: z.string().min(1),
@@ -955,6 +992,8 @@ export const RunManifest = z.object({
     keep: z.boolean().default(false),
     integration: RunManifestIntegration.optional(),
   }).default({ enabled: false, keep: false }),
+  policy: RunManifestPolicy.optional(),
+  recovery: RunManifestRecovery.optional(),
   startedAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   completedAt: z.string().datetime().optional(),

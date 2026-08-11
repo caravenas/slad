@@ -20,9 +20,12 @@ type BaseContext = {
 
 export type LifecycleHookContext =
   | (BaseContext & { event: "pre-plan"; command: "plan"; input?: string; importPath?: string; sessionId?: string; intent?: string })
-  | (BaseContext & { event: "pre-run"; command: "run"; sessionId: string; intent: string; plan: PlanOutput })
+  // runId and resume are additive and optional: existing hooks keep working,
+  // and a Ctrl-C now fires post-run with status "interrupted" instead of
+  // leaving a notification hook waiting forever.
+  | (BaseContext & { event: "pre-run"; command: "run"; sessionId: string; intent: string; plan: PlanOutput; runId?: string; resume?: { fromRun: string } })
   | (BaseContext & { event: "post-task"; command: "run"; sessionId: string; task: PlanTask; output: RunOutput })
-  | (BaseContext & { event: "post-run"; command: "run"; sessionId: string; status: string })
+  | (BaseContext & { event: "post-run"; command: "run"; sessionId: string; status: string; runId?: string })
   | (BaseContext & { event: "pre-apply"; command: "apply"; runId: string; integration: { branch: string; baseRef: string; tip: string } })
   | (BaseContext & { event: "post-apply"; command: "apply"; runId: string; status: "applied" });
 

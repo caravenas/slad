@@ -73,52 +73,146 @@ function safeRealpath(target: string): string {
   }
 }
 
-/** Removes any worktrees and slad/<sessionId>/* branches left by a previous run. */
-export async function removeSessionWorktrees(cwd: string, sessionId: string): Promise<void> {
+/** Match only the root itself or paths under it — a bare prefix check would
+ * also catch siblings like ".../worktrees-backup". */
+function isUnderRoot(candidate: string, base: string): boolean {
+  return candidate === base || candidate.startsWith(base + path.sep);
+}
+
+/** Registered worktree paths of the session, as git reports them. */
+export async function listSessionWorktreePaths(cwd: string, sessionId: string): Promise<string[]> {
   const root = sessionWorktreesRoot(cwd, sessionId);
   // git reports fully resolved paths; the caller's cwd may traverse symlinks
   // (e.g. /var → /private/var on macOS), so match against both forms.
   const rootReal = safeRealpath(root);
-  // Match only the root itself or paths under it — a bare prefix check would
-  // also catch siblings like ".../worktrees-backup".
-  const isUnderRoot = (candidate: string, base: string): boolean =>
-    candidate === base || candidate.startsWith(base + path.sep);
   const listing = await git(cwd, "worktree", "list", "--porcelain").catch(() => "");
+  const paths: string[] = [];
   for (const line of listing.split("\n")) {
     if (!line.startsWith("worktree ")) continue;
     const worktreePath = line.slice("worktree ".length);
-    if (isUnderRoot(worktreePath, root) || isUnderRoot(worktreePath, rootReal)) {
-      await git(cwd, "worktree", "remove", "--force", worktreePath).catch(() => undefined);
-    }
+    if (isUnderRoot(worktreePath, root) || isUnderRoot(worktreePath, rootReal)) paths.push(worktreePath);
+  }
+  return paths;
+}
+
+/** `slad/<sessionId>/*` branch names that currently exist, with their tips. */
+export async function listSessionRefs(
+  cwd: string,
+  sessionId: string,
+): Promise<{ branch: string; tip: string }[]> {
+  const listing = await git(
+    cwd, "for-each-ref", `refs/heads/slad/${sessionId}/`, "--format=%(refname:short)%09%(objectname)",
+  ).catch(() => "");
+  return listing.split("\n").filter(Boolean).map((line) => {
+    const [branch, tip] = line.split("\t");
+    return { branch: branch!, tip: tip ?? "" };
+  });
+}
+
+/** The trailing segment of `slad/<sessionId>/<suffix>`, or null when malformed. */
+export function sessionRefSuffix(branch: string, sessionId: string): string | null {
+  const prefix = `slad/${sessionId}/`;
+  return branch.startsWith(prefix) ? branch.slice(prefix.length) || null : null;
+}
+
+/** Reachability, never commit-message parsing: is `ref` already in `tip`? */
+export async function isAncestorRef(cwd: string, ref: string, tip: string): Promise<boolean> {
+  try {
+    await git(cwd, "merge-base", "--is-ancestor", ref, tip);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Removes any worktrees and slad/<sessionId>/* branches left by a previous run. */
+export async function removeSessionWorktrees(cwd: string, sessionId: string): Promise<void> {
+  for (const worktreePath of await listSessionWorktreePaths(cwd, sessionId)) {
+    await git(cwd, "worktree", "remove", "--force", worktreePath).catch(() => undefined);
   }
   await git(cwd, "worktree", "prune").catch(() => undefined);
-  const branches = await git(
-    cwd, "for-each-ref", `refs/heads/slad/${sessionId}/`, "--format=%(refname:short)",
-  ).catch(() => "");
-  for (const branch of branches.split("\n").filter(Boolean)) {
+  for (const { branch } of await listSessionRefs(cwd, sessionId)) {
     await git(cwd, "branch", "-D", branch).catch(() => undefined);
   }
 }
 
 /**
- * Creates the session integration worktree/branch at `fromRef` (default HEAD).
- * A --from-review follow-up passes the previous run's integration tip so the
- * new run continues on top of the not-yet-applied result.
+ * Recycles the *task* worktrees of a resume/follow-up: `addTaskWorktree` uses
+ * fixed paths and `worktree add` fails when the directory is already
+ * registered. Never touches `_integration` nor `slad/<sessionId>/integration`,
+ * and only acts on task ids the caller could attribute to the parent manifest.
+ */
+export async function removeTaskWorktrees(
+  cwd: string,
+  sessionId: string,
+  taskIds: readonly string[],
+): Promise<void> {
+  const root = sessionWorktreesRoot(cwd, sessionId);
+  const rootReal = safeRealpath(root);
+  const known = new Set(taskIds);
+  for (const worktreePath of await listSessionWorktreePaths(cwd, sessionId)) {
+    const base = path.basename(worktreePath);
+    if (base === "_integration" || !known.has(base)) continue;
+    if (!isUnderRoot(worktreePath, root) && !isUnderRoot(worktreePath, rootReal)) continue;
+    await git(cwd, "worktree", "remove", "--force", worktreePath).catch(() => undefined);
+  }
+  await git(cwd, "worktree", "prune").catch(() => undefined);
+}
+
+export interface SetupIntegrationOptions {
+  /**
+   * Task ids whose worktrees may be recycled (`--resume` / `--from-review`):
+   * `addTaskWorktree` uses fixed paths and `worktree add` fails on a directory
+   * that is already registered. The fresh-run path passes nothing — its
+   * residue must already be resolved by the caller's guard, because SLAD never
+   * cleans ambiguous residue on its own.
+   */
+  recycleTasks?: readonly string[];
+}
+
+/**
+ * Creates (or reuses) the session integration worktree/branch at `fromRef`
+ * (default HEAD). A --from-review follow-up or a --resume passes the previous
+ * integration tip so the new run continues on top of the not-yet-applied
+ * result; reusing the existing worktree keeps the pinned base permanently
+ * reachable instead of deleting and recreating the branch around it.
  */
 export async function setupIntegration(
   cwd: string,
   sessionId: string,
   fromRef?: string,
+  options: SetupIntegrationOptions = {},
 ): Promise<IntegrationSetup> {
-  // Resolve before cleanup: removeSessionWorktrees deletes slad/* branches,
-  // so a fromRef naming one must be pinned to a sha first.
+  // Resolve first: a fromRef naming a slad/* branch must be pinned to a sha
+  // before any cleanup can move it.
   const baseRef = await git(cwd, "rev-parse", "--verify", `${fromRef ?? "HEAD"}^{commit}`).catch(() => {
     throw new Error(`La ref base de integración no existe en este repo: ${fromRef ?? "HEAD"}`);
   });
-  await removeSessionWorktrees(cwd, sessionId);
   const integrationBranch = sessionBranch(sessionId, "integration");
   const integrationDir = path.join(sessionWorktreesRoot(cwd, sessionId), "_integration");
-  await git(cwd, "worktree", "add", "-B", integrationBranch, integrationDir, baseRef);
+  // Both `worktree add -B` and `checkout -B` would silently move an existing
+  // integration branch onto the new base, discarding merged work. That is the
+  // one way this system could lose work (F5), so it refuses instead. A chain
+  // continuation is unaffected: there, baseRef *is* the current tip.
+  const existingTip = await branchTip(cwd, integrationBranch);
+  if (existingTip !== null && existingTip !== baseRef) {
+    throw new Error(
+      `La rama de integración ${integrationBranch} ya tiene trabajo sin aplicar ` +
+      `(tip ${existingTip.slice(0, 12)} ≠ base ${baseRef.slice(0, 12)}); ` +
+      "resolvela con --review / --resume / --apply / --abort antes de arrancar un run nuevo.",
+    );
+  }
+  if (options.recycleTasks?.length) {
+    await removeTaskWorktrees(cwd, sessionId, options.recycleTasks);
+  }
+  const registered = await listSessionWorktreePaths(cwd, sessionId);
+  const reusable = registered.some((candidate) =>
+    candidate === integrationDir || candidate === safeRealpath(integrationDir));
+  if (reusable) {
+    await git(integrationDir, "checkout", "-q", "-B", integrationBranch, baseRef);
+  } else {
+    await git(cwd, "worktree", "add", "-B", integrationBranch, integrationDir, baseRef);
+  }
   return { integrationBranch, integrationDir, baseRef };
 }
 

@@ -119,7 +119,9 @@ export function resolveProvider(
   // When defaultAgent is set (not an explicit --agent flag), configure the CLI
   // binary env vars so every stage runs through that agent backend.
   if (!agent && defaultAgent) {
-    applyAgentEnv(AgentName.parse(defaultAgent));
+    if (!envValue("SLAD_CLI_BINARY")) {
+      applyAgentEnv(AgentName.parse(defaultAgent));
+    }
     return ProviderName.parse(provider ?? defaultProvider);
   }
 

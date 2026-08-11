@@ -411,6 +411,60 @@ describe("runParallel", () => {
     assert.ok(fs.readFileSync(promptPath, "utf8").includes("Selected task"));
     fs.rmSync(cwd, { recursive: true, force: true });
   });
+
+  it("si una reserva posterior falla, aborta y espera los workers ya lanzados antes de rethrow", async () => {
+    const cwd = tmpCwd();
+    const integrated: string[] = [];
+    const emitted: string[] = [];
+    let aborted = false;
+    let settled = false;
+
+    await assert.rejects(
+      runParallel({
+        plan: plan([task("T1", ["a.ts"]), task("T2", ["b.ts"])]),
+        sessionId: "s1",
+        cwd,
+        maxParallel: 3,
+        strictOwnership: false,
+        print: () => undefined,
+        listChangedFiles: async () => new Set(),
+        onTaskIntegrated: async (taskId) => {
+          integrated.push(taskId);
+        },
+        onTaskOutput: async (output) => {
+          emitted.push(output.taskId);
+        },
+        onDispatchReserve: async (taskId) => {
+          if (taskId === "T2") throw new Error("durable reserve failed");
+        },
+        runWorker: async ({ task: t, signal, onWorkerStarted }) => {
+          onWorkerStarted?.({ pid: process.pid, mode: "child" });
+          await new Promise<void>((resolve) => {
+            const finish = () => {
+              signal?.removeEventListener("abort", finish);
+              aborted = signal?.aborted ?? false;
+              settled = true;
+              resolve();
+            };
+            signal?.addEventListener("abort", finish, { once: true });
+          });
+          return { exitCode: 0, stdout: workerJson(t.id) };
+        },
+      }),
+      /durable reserve failed/,
+    );
+
+    assert.equal(aborted, true, "el worker ya lanzado debe recibir abort");
+    assert.equal(settled, true, "runParallel debe esperar el finally del worker antes de salir");
+    assert.deepEqual(integrated, []);
+    assert.deepEqual(emitted, []);
+    assert.equal(
+      fs.existsSync(path.join(cwd, ".slad-os", "sessions", "s1", "workers", "T1.json")),
+      false,
+      "el sentinel del worker abortado debe limpiarse",
+    );
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
 });
 
 describe("computeOwnershipViolations — exenciones", () => {
@@ -604,7 +658,7 @@ describe("runParallel — worktrees", () => {
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 
-  it("un rerun de la misma sesión limpia worktrees y ramas anteriores", async () => {
+  it("un rerun de la misma sesión no borra el residuo anterior; solo procede tras limpiarlo", async () => {
     const cwd = makeRepo();
     const opts = {
       plan: plan([task("T1", ["a.txt"])]),
@@ -620,7 +674,15 @@ describe("runParallel — worktrees", () => {
     const first = await runParallel(opts);
     assert.equal(first.status, "completed");
     assert.ok(first.integration);
-    // A rerun starts from a fresh integration branch off HEAD.
+
+    // A2: setupIntegration no longer deletes the session's refs and worktrees,
+    // so a rerun over unresolved residue fails loudly instead of destroying it.
+    await assert.rejects(runParallel(opts), /trabajo sin aplicar/);
+    assert.equal(git(cwd, "rev-parse", first.integration.branch), first.integration.tip);
+    assert.equal(git(cwd, "show", `${first.integration.tip}:a.txt`), "T1 wrote a.txt");
+
+    // Once the human resolved it (what --abort does), the rerun proceeds.
+    await removeSessionWorktrees(cwd, "wt4");
     const second = await runParallel(opts);
     assert.equal(second.status, "completed");
     assert.ok(second.integration);

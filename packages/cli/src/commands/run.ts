@@ -1,4 +1,8 @@
 
+import path from "node:path";
+import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { promisify } from "node:util";
 import ora from "ora";
 import kleur from "kleur";
 import { runSladPipeline } from "@slad/pipeline";
@@ -14,20 +18,49 @@ import * as prompts from "../agents/prompts.js";
 import { getActiveSession, appendArtifact, readSessionPlan, saveSession } from "../core/session.js";
 import { PlanOutput, type PlanArtifactEnvelope, type RunOutput } from "../core/types.js";
 import { ProviderError } from "../core/errors.js";
-import { runParallel } from "./run-parallel.js";
-import { applyIntegrationBranch, branchTip, describeIntegration, removeSessionWorktrees } from "./worktrees.js";
+import { DurableWriteError, runParallel } from "./run-parallel.js";
+import {
+  applyIntegrationBranch,
+  branchTip,
+  describeIntegration,
+  removeSessionWorktrees,
+  sessionBranch,
+  sessionRefSuffix,
+  listSessionRefs,
+  listSessionWorktreePaths,
+  hasUncommittedChanges,
+} from "./worktrees.js";
 import { gatePlanPreflight, printPlanPreflight } from "../core/plan-preflight.js";
 import {
+  checkpointTaskIntegration,
   completeRunManifest,
   createRunManifest,
   interruptStaleRunManifests,
+  markRunInterrupted,
+  markRunUnrecoverable,
   readRunManifest,
+  recordIntegration,
+  reserveTaskDispatch,
   runManifestPath,
   sha256File,
   updateRunManifest,
   type RunManifestHandle,
 } from "../persistence/manifest.js";
 import { loadLifecycleHooks, runPostLifecycleHooks, runPreLifecycleHooks } from "../core/lifecycle-hooks.js";
+import { createInterruptScope, INTERRUPT_EXIT_CODE } from "../core/interrupt.js";
+import {
+  acquireSessionLock,
+  releaseSessionLock,
+  type SessionLockCommand,
+  type SessionLockHandle,
+} from "../core/session-lock.js";
+import {
+  clearWorkerSentinels,
+  inspectWorkers,
+  killSessionTmuxWindows,
+  workerGuardMessage,
+} from "../core/worker-sentinels.js";
+import { collectSessionResidue, formatResidueRefusal, hasResidue } from "../core/session-residue.js";
 
 export interface RunOpts {
   input?: string;
@@ -58,6 +91,56 @@ export interface RunOpts {
   abort?: string;
   /** Ejecuta el plan activo como follow-up desde el tip de integración de un run review_pending. */
   fromReview?: string;
+  /** Reanuda un run interrumpido por señal controlada (recovery.safe). */
+  resume?: string;
+  /** Escape hatch del lock de sesión: exige copiar el runId del tenedor. */
+  forceUnlock?: string;
+  /** Escape hatch de los sentinels: borra sin enviar ninguna señal. */
+  assumeWorkersDead?: boolean;
+  /** Fuerza el gate de ownership al reanudar un padre sin `policy` registrada. */
+  noStrictOwnership?: boolean;
+}
+
+// ─── Session lock / worker guards shared by the mutating commands ────────────
+
+/** Takes the session lock, printing the refusal itself. Null means blocked. */
+function takeSessionLock(
+  cwd: string,
+  sessionId: string,
+  runId: string,
+  command: SessionLockCommand,
+  forceUnlock?: string,
+): SessionLockHandle | null {
+  const result = acquireSessionLock(cwd, sessionId, { runId, command, forceUnlock });
+  if (result.ok) return result.lock;
+  log.error(result.reason);
+  return null;
+}
+
+/**
+ * `--resume`, `--apply` and `--abort` all delete session worktrees or move a
+ * branch a worker could still be writing to, so all three refuse while any
+ * worker is alive or unprovable. Sentinels of workers proven dead are cleared;
+ * `--assume-workers-dead` clears the rest *without sending any signal*.
+ * `--review` is read-only and does not take this guard.
+ */
+function workerGuard(
+  cwd: string,
+  sessionId: string,
+  command: string,
+  assumeWorkersDead?: boolean,
+): boolean {
+  const inspection = inspectWorkers(cwd, sessionId);
+  clearWorkerSentinels(inspection.dead);
+  const blocking = [...inspection.alive, ...inspection.unknown];
+  if (blocking.length === 0) return true;
+  if (assumeWorkersDead) {
+    clearWorkerSentinels(blocking);
+    log.warn(`--assume-workers-dead: ${blocking.length} sentinel(s) borrados sin enviar ninguna señal.`);
+    return true;
+  }
+  log.error(workerGuardMessage(command, sessionId, blocking));
+  return false;
 }
 
 // ─── Review-before-apply actions (worktree runs) ─────────────────────────────
@@ -74,18 +157,55 @@ async function loadRunManifestById(runId: string, cwd: string): Promise<RunManif
 /**
  * Integration metadata of a run that can still be applied/aborted/continued.
  * Logs the reason and returns null when the run is not in that state.
+ *
+ * `interrupted` is included: an interrupted run's work must stay applicable
+ * regardless of whether it is natively resumable, because the alternative is
+ * that the only way out of a class-B death is manual git surgery.
  */
-function pendingIntegration(handle: RunManifestHandle) {
+function pendingIntegration(handle: RunManifestHandle, allow: readonly string[] = ["review_pending", "interrupted"]) {
   const { runId, status, worktrees } = handle.value;
   if (!worktrees.enabled || !worktrees.integration) {
     log.error(`El run ${runId} no es un run --worktrees con integración registrada.`);
     return null;
   }
-  if (status !== "review_pending") {
-    log.error(`El run ${runId} no está review_pending (status: ${status}); no hay nada que aplicar ni abortar.`);
+  if (!allow.includes(status)) {
+    log.error(
+      `El run ${runId} no está ${allow.join(" ni ")} (status: ${status}); no hay nada que aplicar ni abortar.`,
+    );
     return null;
   }
   return worktrees.integration;
+}
+
+/**
+ * Class-B diagnosis (§7.2). The run died without a signal handler, so the
+ * manifest cannot be trusted to describe the branch. Nothing is executed and
+ * nothing is deleted: the branch stays alive and the human decides.
+ */
+async function printUnrecoverableDiagnosis(handle: RunManifestHandle, cwd: string): Promise<void> {
+  const { runId, worktrees, sessionId } = handle.value;
+  const integration = worktrees.integration;
+  log.error(
+    `El run ${runId} terminó sin handler de señal (SIGKILL, crash o corte); no es reanudable de forma nativa.`,
+  );
+  if (integration) {
+    const realTip = await branchTip(cwd, integration.branch);
+    log.dim(`  rama:            ${integration.branch}`);
+    log.dim(`  tip registrado:  ${integration.tip.slice(0, 12)}  (manifest)`);
+    log.dim(`  tip real:        ${(realTip ?? "(la rama ya no existe)").slice(0, 12)}  (git)`);
+  }
+  const alive = inspectWorkers(cwd, sessionId);
+  const blocking = [...alive.alive, ...alive.unknown];
+  if (blocking.length > 0) {
+    log.dim(`  workers vivos:   ${blocking.map((worker) => `${worker.sentinel.taskId} (pid ${worker.sentinel.pid}, host ${worker.sentinel.host})`).join(", ")}`);
+  }
+  console.log("");
+  if (integration) {
+    log.dim(`  git log --oneline ${integration.baseRef.slice(0, 12)}..${integration.branch}    ver qué quedó integrado`);
+  }
+  log.dim(`  slad pipeline run --review ${runId}                            ver la foto del manifest`);
+  log.dim(`  slad pipeline run --apply ${runId}                             solo si el tip real coincide con el registrado`);
+  log.dim(`  slad pipeline run --abort ${runId}                             descarta la integración sin tocar main`);
 }
 
 export async function reviewRunAction(runId: string, cwd: string = process.cwd()): Promise<void> {
@@ -117,87 +237,351 @@ export async function reviewRunAction(runId: string, cwd: string = process.cwd()
   console.log("\n" + kleur.bold("Tareas:"));
   for (const task of value.tasks) {
     const icon = task.status === "completed" ? kleur.green("✓") : task.status === "pending" ? "·" : kleur.red("✗");
-    console.log(`  ${icon} ${task.taskId} ${task.status}`);
+    const artifactNote = task.artifactError ? kleur.yellow(`  artefacto no escrito: ${task.artifactError}`) : "";
+    console.log(`  ${icon} ${task.taskId} ${task.status}${artifactNote}`);
   }
 
-  if (value.status === "review_pending") {
-    log.dim(`\n  slad pipeline run --apply ${runId}   aplica el resultado como cambios staged`);
+  if (value.policy) {
+    log.dim(
+      `\n  política: strict-ownership ${value.policy.strictOwnership ? "on" : "off"}` +
+      `, dispatches ${value.policy.taskDispatches ?? "?"}/${value.limits.maxTasks ?? "?"}`,
+    );
+  }
+
+  if (value.status === "review_pending" || value.status === "interrupted") {
+    if (value.status === "interrupted") {
+      log.dim(
+        value.recovery?.safe
+          ? `\n  interrumpido por ${value.recovery.signal ?? "señal"}; el manifest es exacto y el run es reanudable.`
+          : "\n  interrumpido sin handler de señal; no es reanudable de forma nativa (solo --apply / --abort).",
+      );
+      if (value.recovery?.safe) log.dim(`  slad pipeline run --resume ${runId}  continúa donde se cortó`);
+    }
+    log.dim(`  slad pipeline run --apply ${runId}   aplica el resultado como cambios staged`);
     log.dim(`  slad pipeline run --abort ${runId}   descarta la integración sin tocar main`);
   }
 }
 
-export async function applyRunAction(runId: string, cwd: string = process.cwd()): Promise<void> {
+export async function applyRunAction(
+  runId: string,
+  cwd: string = process.cwd(),
+  opts: Pick<RunOpts, "assumeWorkersDead" | "forceUnlock"> = {},
+): Promise<void> {
   const handle = await loadRunManifestById(runId, cwd);
   const integration = handle ? pendingIntegration(handle) : null;
   if (!handle || !integration) {
     process.exitCode = 1;
     return;
   }
+  const sessionId = handle.value.sessionId;
 
-  const hooks = loadLifecycleHooks(cwd);
+  const lock = takeSessionLock(cwd, sessionId, runId, "apply", opts.forceUnlock);
+  if (!lock) {
+    process.exitCode = 1;
+    return;
+  }
   try {
-    await runPreLifecycleHooks(hooks, "pre-apply", {
-      event: "pre-apply",
+    // A live worker can still move the branch being squashed, and a keep=false
+    // apply then deletes the worktree underneath it.
+    if (!workerGuard(cwd, sessionId, `aplicar el run ${runId}`, opts.assumeWorkersDead)) {
+      process.exitCode = 1;
+      return;
+    }
+
+    const hooks = loadLifecycleHooks(cwd);
+    try {
+      await runPreLifecycleHooks(hooks, "pre-apply", {
+        event: "pre-apply",
+        command: "apply",
+        cwd,
+        runId,
+        integration,
+      });
+    } catch (err) {
+      log.error((err as Error).message);
+      process.exitCode = 1;
+      return;
+    }
+
+    const error = await applyIntegrationBranch(cwd, {
+      branch: integration.branch,
+      baseRef: integration.baseRef,
+      expectedTip: integration.tip,
+    });
+    if (error) {
+      log.error(`No se pudo aplicar el run ${runId}: ${error}`);
+      log.dim(`  La integración sigue intacta en ${integration.branch}.`);
+      process.exitCode = 1;
+      return;
+    }
+
+    await completeRunManifest(handle, "applied", "review applied: squash staged en el worktree principal");
+    if (!handle.value.worktrees.keep) {
+      await removeSessionWorktrees(cwd, sessionId);
+    }
+    await runPostLifecycleHooks(hooks, "post-apply", {
+      event: "post-apply",
       command: "apply",
       cwd,
       runId,
-      integration,
+      status: "applied",
     });
-  } catch (err) {
-    log.error((err as Error).message);
-    process.exitCode = 1;
-    return;
+    log.success(`Run ${runId} aplicado: el resultado quedó staged en el worktree principal, sin commits.`);
+    log.dim("  Revisá con `git diff --cached` y commiteá cuando estés conforme.");
+  } finally {
+    releaseSessionLock(lock);
   }
-
-  const error = await applyIntegrationBranch(cwd, {
-    branch: integration.branch,
-    baseRef: integration.baseRef,
-    expectedTip: integration.tip,
-  });
-  if (error) {
-    log.error(`No se pudo aplicar el run ${runId}: ${error}`);
-    log.dim(`  La integración sigue intacta en ${integration.branch}.`);
-    process.exitCode = 1;
-    return;
-  }
-
-  await completeRunManifest(handle, "applied", "review applied: squash staged en el worktree principal");
-  if (!handle.value.worktrees.keep) {
-    await removeSessionWorktrees(cwd, handle.value.sessionId);
-  }
-  await runPostLifecycleHooks(hooks, "post-apply", {
-    event: "post-apply",
-    command: "apply",
-    cwd,
-    runId,
-    status: "applied",
-  });
-  log.success(`Run ${runId} aplicado: el resultado quedó staged en el worktree principal, sin commits.`);
-  log.dim("  Revisá con `git diff --cached` y commiteá cuando estés conforme.");
 }
 
-export async function abortRunAction(runId: string, cwd: string = process.cwd()): Promise<void> {
+export async function abortRunAction(
+  runId: string,
+  cwd: string = process.cwd(),
+  opts: Pick<RunOpts, "assumeWorkersDead" | "forceUnlock"> = {},
+): Promise<void> {
   const handle = await loadRunManifestById(runId, cwd);
   const integration = handle ? pendingIntegration(handle) : null;
   if (!handle || !integration) {
     process.exitCode = 1;
     return;
   }
+  const sessionId = handle.value.sessionId;
 
+  const lock = takeSessionLock(cwd, sessionId, runId, "abort", opts.forceUnlock);
+  if (!lock) {
+    process.exitCode = 1;
+    return;
+  }
+  try {
+    // removeSessionWorktrees force-removes the worktree a live worker is
+    // writing into; the guard refuses instead of racing it.
+    if (!workerGuard(cwd, sessionId, `abortar el run ${runId}`, opts.assumeWorkersDead)) {
+      process.exitCode = 1;
+      return;
+    }
+
+    const tip = await branchTip(cwd, integration.branch);
+    if (tip !== integration.tip) {
+      log.error(
+        tip === null
+          ? `No se pudo abortar el run ${runId}: la rama de integración ${integration.branch} ya no existe.`
+          : `No se pudo abortar el run ${runId}: la rama ${integration.branch} se movió desde el run.`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    await removeSessionWorktrees(cwd, sessionId);
+    await completeRunManifest(handle, "aborted", "review aborted: integración descartada sin tocar el worktree principal");
+    log.success(`Run ${runId} abortado: ramas y worktrees de la sesión eliminados; el worktree principal quedó intacto.`);
+  } finally {
+    releaseSessionLock(lock);
+  }
+}
+
+/** Everything `--resume` inherits from its parent, once every guard passed. */
+interface ResumeContext {
+  parent: RunManifestHandle;
+  integration: NonNullable<RunManifestHandle["value"]["worktrees"]["integration"]>;
+  /** Parent tasks already `completed`: the skip set (I2), valid by I0. */
+  skipSet: string[];
+  /** Parent task entries copied into the child so --review shows the chain. */
+  inheritedTasks: RunManifestHandle["value"]["tasks"];
+  strictOwnership: boolean;
+  taskDispatches: number;
+  maxTasks: number;
+}
+
+/**
+ * Guards of §7.1, in order, with the session lock already held by the caller.
+ * Nothing creates state before all of them pass; a rejection returns null
+ * after printing the reason.
+ */
+async function resolveResume(
+  runId: string,
+  opts: RunOpts,
+  sessionId: string,
+  planEnvelope: PlanArtifactEnvelope,
+  cwd: string,
+): Promise<ResumeContext | null> {
+  const parent = await loadRunManifestById(runId, cwd);
+  if (!parent) return null;
+  const { value } = parent;
+
+  // 2 — a run without worktrees is not resumable: no isolation, no exactly-once.
+  if (!value.worktrees.enabled || !value.worktrees.integration) {
+    log.error(`El run ${runId} no es un run --worktrees con integración registrada; no se puede reanudar.`);
+    return null;
+  }
+  const integration = value.worktrees.integration;
+
+  // 3 — status.
+  if (value.status !== "interrupted") {
+    log.error(
+      value.status === "review_pending"
+        ? `El run ${runId} está review_pending, no interrumpido; continualo con --from-review ${runId}.`
+        : `El run ${runId} no está interrupted (status: ${value.status}); no hay nada que reanudar.`,
+    );
+    return null;
+  }
+
+  // 4 — class A only. A missing `recovery` is a pre-change manifest and fails safe.
+  if (value.recovery?.safe !== true) {
+    await printUnrecoverableDiagnosis(parent, cwd);
+    return null;
+  }
+
+  // 5 — same session.
+  if (value.sessionId !== sessionId) {
+    log.error(
+      `El run ${runId} pertenece a la sesión ${value.sessionId}, no a la activa (${sessionId}). ` +
+      "Reanudá esa sesión (slad pipeline session use) antes de continuar.",
+    );
+    return null;
+  }
+
+  // 6 — same approved plan. A parent run with --bypass never became approved,
+  // so resume can never be an indirect way to inherit a bypass.
+  if (value.plan?.approval !== "approved") {
+    log.error(`El run ${runId} no corrió sobre un plan aprobado (approval: ${value.plan?.approval ?? "sin plan"}); no se reanuda.`);
+    return null;
+  }
+  if (value.plan.hash !== planEnvelope.approval.planHash ||
+      (value.plan.planId !== undefined && value.plan.planId !== planEnvelope.planId)) {
+    log.error(
+      `El plan activo cambió desde el run ${runId} (hash ${planEnvelope.approval.planHash.slice(0, 12)} ≠ ` +
+      `${value.plan.hash.slice(0, 12)}); reanudar ejecutaría otro plan.`,
+    );
+    return null;
+  }
+
+  // 7 — ownership policy: absent must stay distinguishable from off.
+  let strictOwnership: boolean;
+  if (opts.strictOwnership || opts.noStrictOwnership) {
+    strictOwnership = opts.strictOwnership === true;
+  } else if (value.policy) {
+    strictOwnership = value.policy.strictOwnership;
+  } else {
+    log.error(
+      `El run ${runId} no registró su política de ownership (manifest anterior a este cambio). ` +
+      "Pasá --strict-ownership o --no-strict-ownership explícitamente para reanudarlo.",
+    );
+    return null;
+  }
+
+  // 8 — exact tip. No reconciliation, no exceptions: I0 guarantees equality.
   const tip = await branchTip(cwd, integration.branch);
   if (tip !== integration.tip) {
     log.error(
       tip === null
-        ? `No se pudo abortar el run ${runId}: la rama de integración ${integration.branch} ya no existe.`
-        : `No se pudo abortar el run ${runId}: la rama ${integration.branch} se movió desde el run.`,
+        ? `La rama de integración ${integration.branch} ya no existe; no se puede reanudar el run ${runId}.`
+        : `La rama ${integration.branch} se movió desde el run ${runId} ` +
+          `(tip ${tip.slice(0, 12)} ≠ manifest ${integration.tip.slice(0, 12)}); no se reanuda con seguridad.`,
     );
-    process.exitCode = 1;
-    return;
+    return null;
   }
 
-  await removeSessionWorktrees(cwd, handle.value.sessionId);
-  await completeRunManifest(handle, "aborted", "review aborted: integración descartada sin tocar el worktree principal");
-  log.success(`Run ${runId} abortado: ramas y worktrees de la sesión eliminados; el worktree principal quedó intacto.`);
+  // 8b — every ref and worktree under the session namespace is attributable to
+  // the integration or to a task of the parent manifest.
+  const parentTaskIds = new Set(value.tasks.map((task) => task.taskId));
+  const strayRefs = (await listSessionRefs(cwd, sessionId)).filter(({ branch }) => {
+    if (branch === integration.branch) return false;
+    const suffix = sessionRefSuffix(branch, sessionId);
+    return suffix === null || !parentTaskIds.has(suffix);
+  });
+  const strayWorktrees = (await listSessionWorktreePaths(cwd, sessionId)).filter((worktreePath) => {
+    const base = path.basename(worktreePath);
+    return base !== "_integration" && !parentTaskIds.has(base);
+  });
+  if (strayRefs.length > 0 || strayWorktrees.length > 0) {
+    log.error(
+      `La sesión ${sessionId} tiene residuo que no pertenece a ninguna tarea del run ${runId}; no se reanuda.\n\n` +
+      [
+        ...strayRefs.map(({ branch, tip: refTip }) => `  ref        ${branch}  ${refTip.slice(0, 7)}`),
+        ...strayWorktrees.map((worktreePath) => `  worktree   ${worktreePath}`),
+        "",
+        "  Residuo sin dueño (SLAD no lo toca):",
+        ...strayRefs.map(({ branch }) => `    git branch -D ${branch}`),
+        ...strayWorktrees.map((worktreePath) => `    git worktree remove --force ${worktreePath}`),
+      ].join("\n"),
+    );
+    return null;
+  }
+
+  // 9 — the later squash assumes this base.
+  const head = await currentHead(cwd);
+  if (head !== integration.baseRef) {
+    log.error(
+      `El worktree principal se movió desde el run ${runId} (HEAD ${(head ?? "?").slice(0, 12)} ≠ ` +
+      `base ${integration.baseRef.slice(0, 12)}); el apply posterior asumía esa base.`,
+    );
+    return null;
+  }
+  if (await hasUncommittedChanges(cwd)) {
+    log.error("El worktree principal tiene cambios sin commitear; commiteá o stasheá antes de reanudar.");
+    return null;
+  }
+
+  // 10 — workers.
+  if (!workerGuard(cwd, sessionId, `reanudar el run ${runId}`, opts.assumeWorkersDead)) return null;
+
+  // 11 — chain budget. --max-tasks can only go up, and strictly above what the
+  // chain already spent.
+  const taskDispatches = value.policy?.taskDispatches;
+  if (taskDispatches === undefined) {
+    log.error(
+      `El run ${runId} no registró dispatches consumidos (manifest anterior a este cambio). ` +
+      "Pasá --max-tasks explícitamente para reanudarlo.",
+    );
+    if (opts.maxTasks === undefined) return null;
+  }
+  const spent = taskDispatches ?? 0;
+  const inheritedMax = value.limits.maxTasks ?? 10;
+  let maxTasks = inheritedMax;
+  if (opts.maxTasks !== undefined) {
+    if (opts.maxTasks < inheritedMax) {
+      log.error(
+        `--max-tasks ${opts.maxTasks} es menor que el budget de la cadena (${inheritedMax}); ` +
+        "bajar el budget de una cadena en curso no tiene semántica útil.",
+      );
+      return null;
+    }
+    if (opts.maxTasks <= spent) {
+      log.error(`--max-tasks ${opts.maxTasks} no supera los ${spent} dispatches ya consumidos por la cadena.`);
+      return null;
+    }
+    maxTasks = opts.maxTasks;
+  } else if (maxTasks - spent <= 0) {
+    log.error(
+      `La cadena del run ${runId} agotó su budget (${spent}/${inheritedMax} dispatches). ` +
+      `Subilo con --max-tasks <n> (> ${spent}) para continuar.`,
+    );
+    return null;
+  }
+
+  const skipSet = value.tasks.filter((task) => task.status === "completed").map((task) => task.taskId);
+  return {
+    parent,
+    integration,
+    skipSet,
+    // Only the completed entries carry over: failure is never inherited (I6),
+    // and a `skipped` that was mere cascade of a killed worker goes back to
+    // pending on its own.
+    inheritedTasks: value.tasks.filter((task) => task.status === "completed"),
+    strictOwnership,
+    taskDispatches: spent,
+    maxTasks,
+  };
+}
+
+const exec = promisify(execFile);
+
+async function currentHead(cwd: string): Promise<string | null> {
+  try {
+    const { stdout } = await exec("git", ["-C", cwd, "rev-parse", "HEAD"]);
+    return stdout.trim();
+  } catch {
+    return null;
+  }
 }
 
 export async function runCommand(opts: RunOpts): Promise<void> {
@@ -211,8 +595,27 @@ export async function runCommand(opts: RunOpts): Promise<void> {
     return;
   }
   if (reviewActions.length === 1 &&
-      (opts.parallel || opts.worktrees || opts.keepWorktrees || opts.fromReview || opts.auto || opts.task || opts.bypass)) {
+      (opts.parallel || opts.worktrees || opts.keepWorktrees || opts.fromReview || opts.auto || opts.task || opts.bypass || opts.resume)) {
     log.error("--review/--apply/--abort operan sobre un run ya ejecutado y no se combinan con flags de ejecución.");
+    process.exitCode = 1;
+    return;
+  }
+  if (opts.resume) {
+    // --resume replays a recorded decision: every flag that would change what
+    // runs, how it is isolated, or whether approval is required is refused.
+    const conflicting = [
+      ["--parallel", opts.parallel], ["--worktrees", opts.worktrees], ["--keep-worktrees", opts.keepWorktrees],
+      ["--from-review", opts.fromReview], ["--review", opts.review], ["--apply", opts.apply],
+      ["--abort", opts.abort], ["--task", opts.task], ["--auto", opts.auto], ["--bypass", opts.bypass],
+    ].filter(([, value]) => Boolean(value)).map(([flag]) => flag as string);
+    if (conflicting.length > 0) {
+      log.error(`--resume no se combina con ${conflicting.join(", ")}: reanuda el run tal como fue configurado.`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+  if (opts.strictOwnership && opts.noStrictOwnership) {
+    log.error("--strict-ownership y --no-strict-ownership son mutuamente exclusivos.");
     process.exitCode = 1;
     return;
   }
@@ -233,8 +636,8 @@ export async function runCommand(opts: RunOpts): Promise<void> {
   }
 
   if (opts.review) return reviewRunAction(opts.review, cwd);
-  if (opts.apply) return applyRunAction(opts.apply, cwd);
-  if (opts.abort) return abortRunAction(opts.abort, cwd);
+  if (opts.apply) return applyRunAction(opts.apply, cwd, opts);
+  if (opts.abort) return abortRunAction(opts.abort, cwd, opts);
 
   const session = opts.skipSession ? null : getActiveSession(cwd);
   const intent = session?.intent ?? "continue plan execution";
@@ -244,6 +647,44 @@ export async function runCommand(opts: RunOpts): Promise<void> {
     process.exitCode = 1;
     return;
   }
+
+  // §5 — the session lock is guard 1: every guard after it reads state another
+  // process could be mutating. Git's own worktree lock is per-operation, not
+  // per-session, so two concurrent resumes would both pass and the second one
+  // would clean the worktrees the first is using.
+  const runId = `run_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
+  const needsLock = Boolean(opts.resume) || Boolean(opts.fromReview) || Boolean(opts.parallel && opts.worktrees);
+  let lock: SessionLockHandle | null = null;
+  if (needsLock) {
+    lock = takeSessionLock(cwd, session.id, runId, opts.resume ? "resume" : "run", opts.forceUnlock);
+    if (!lock) {
+      process.exitCode = 1;
+      return;
+    }
+  }
+  const releaseLock = (): void => {
+    if (!lock) return;
+    releaseSessionLock(lock);
+    lock = null;
+  };
+
+  try {
+    await runCommandLocked(opts, { cwd, session, intent, runId, releaseLock });
+  } finally {
+    releaseLock();
+  }
+}
+
+interface LockedRunContext {
+  cwd: string;
+  session: NonNullable<ReturnType<typeof getActiveSession>>;
+  intent: string;
+  runId: string;
+  releaseLock: () => void;
+}
+
+async function runCommandLocked(opts: RunOpts, ctx: LockedRunContext): Promise<void> {
+  const { cwd, session, intent, runId, releaseLock } = ctx;
 
   // Load the normalized plan envelope — execution requires explicit approval.
   let planRead: ReadPlanResult | null;
@@ -285,13 +726,26 @@ export async function runCommand(opts: RunOpts): Promise<void> {
   const taskById = new Map(parsedPlan.tasks.map((task) => [task.id, task]));
   const hooks = loadLifecycleHooks(cwd);
 
+  // --resume: continue a run interrupted by a caught signal. Every guard of
+  // §7.1 resolves before any state is created.
+  let resumeContext: ResumeContext | null = null;
+  if (opts.resume) {
+    resumeContext = await resolveResume(opts.resume, opts, session.id, planEnvelope, cwd);
+    if (!resumeContext) {
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   // --from-review: the follow-up plan runs on top of the parent run's not-yet-
   // applied integration. All guards resolve before any manifest is created.
   let parentReview: RunManifestHandle | null = null;
   let fromIntegration: { ref: string; baseRef: string } | undefined;
   if (opts.fromReview) {
     parentReview = await loadRunManifestById(opts.fromReview, cwd);
-    const parentIntegration = parentReview ? pendingIntegration(parentReview) : null;
+    const parentIntegration = parentReview
+      ? pendingIntegration(parentReview, ["review_pending"])
+      : null;
     if (!parentReview || !parentIntegration) {
       process.exitCode = 1;
       return;
@@ -314,7 +768,31 @@ export async function runCommand(opts: RunOpts): Promise<void> {
       process.exitCode = 1;
       return;
     }
+    if (!workerGuard(cwd, session.id, `continuar el run ${opts.fromReview}`, opts.assumeWorkersDead)) {
+      process.exitCode = 1;
+      return;
+    }
     fromIntegration = { ref: parentIntegration.tip, baseRef: parentIntegration.baseRef };
+  }
+  if (resumeContext) {
+    fromIntegration = {
+      ref: resumeContext.integration.tip,
+      baseRef: resumeContext.integration.baseRef,
+    };
+  }
+
+  // A2 — a fresh worktrees run refuses while the session holds any execution
+  // residue. `setupIntegration` used to delete every slad/<session>/* branch
+  // and force-remove every session worktree here (F5): the only way this
+  // system could actually destroy work. SLAD never cleans ambiguous residue.
+  const parentRunId = resumeContext?.parent.value.runId ?? parentReview?.value.runId;
+  if (opts.parallel && opts.worktrees && !fromIntegration) {
+    const residue = await collectSessionResidue(cwd, session.id);
+    if (hasResidue(residue)) {
+      log.error(formatResidueRefusal(session.id, residue));
+      process.exitCode = 1;
+      return;
+    }
   }
 
   try {
@@ -322,9 +800,11 @@ export async function runCommand(opts: RunOpts): Promise<void> {
       event: "pre-run",
       command: "run",
       cwd,
+      runId,
       sessionId: session.id,
       intent,
       plan: parsedPlan,
+      ...(parentRunId && resumeContext ? { resume: { fromRun: parentRunId } } : {}),
     });
   } catch (err) {
     log.error((err as Error).message);
@@ -332,11 +812,25 @@ export async function runCommand(opts: RunOpts): Promise<void> {
     return;
   }
 
-  await interruptStaleRunManifests(session.id, cwd);
+  // A resume must not terminalize its own parent, whose `interrupted` status
+  // is exactly the state it is resuming from.
+  if (!resumeContext) await interruptStaleRunManifests(session.id, cwd);
+
+  const useWorktrees = opts.worktrees ?? resumeContext !== null;
+  const keepWorktrees = opts.keepWorktrees ?? resumeContext?.parent.value.worktrees.keep ?? false;
+  const strictOwnership = resumeContext?.strictOwnership ?? opts.strictOwnership ?? false;
+  const maxTasks = resumeContext?.maxTasks ?? opts.maxTasks ?? 10;
+  const maxParallel = opts.maxParallel ?? resumeContext?.parent.value.limits.maxParallel ?? 3;
+  const runsParallel = opts.parallel || resumeContext !== null;
+  const inheritedTasks = new Map(
+    (resumeContext?.inheritedTasks ?? []).map((task) => [task.taskId, task]),
+  );
+
   const manifest = await createRunManifest({
+    runId,
     sessionId: session.id,
     intent,
-    command: opts.parallel ? "run-parallel" : "run",
+    command: runsParallel ? "run-parallel" : "run",
     plan: planEnvelope ? {
       planId: planEnvelope.planId,
       hash: planEnvelope.approval.planHash,
@@ -348,46 +842,109 @@ export async function runCommand(opts: RunOpts): Promise<void> {
       model: selectedModel,
     },
     stages: [{ id: "run", status: "pending" }],
-    tasks: parsedPlan.tasks.map((task) => ({ taskId: task.id, status: "pending" as const })),
+    // Completed parent entries are copied so `--review` shows the whole chain;
+    // they never feed the budget, which is its own counter.
+    tasks: parsedPlan.tasks.map((task) =>
+      inheritedTasks.get(task.id) ?? { taskId: task.id, status: "pending" as const }),
     limits: {
-      maxTasks: opts.maxTasks ?? 10,
-      maxParallel: opts.parallel ? (opts.maxParallel ?? 3) : undefined,
+      maxTasks,
+      maxParallel: runsParallel ? maxParallel : undefined,
     },
-    worktrees: { enabled: opts.worktrees ?? false, keep: opts.keepWorktrees ?? false },
+    worktrees: { enabled: useWorktrees, keep: keepWorktrees },
+    ...(runsParallel
+      ? { policy: { strictOwnership, taskDispatches: resumeContext?.taskDispatches ?? 0 } }
+      : {}),
   }, cwd);
+
+  // §7.3 — record-before-create: the integration is written to the manifest
+  // *before* setupIntegration creates the branch, so a class-B death in that
+  // window still leaves a branch every command recognizes.
+  if (runsParallel && useWorktrees) {
+    const chainBase = fromIntegration?.baseRef ?? await currentHead(cwd);
+    if (chainBase) {
+      await recordIntegration(manifest, {
+        branch: sessionBranch(session.id, "integration"),
+        baseRef: chainBase,
+        tip: fromIntegration?.ref ?? chainBase,
+        ...(parentRunId ? { fromRun: parentRunId } : {}),
+      });
+    }
+  }
   await updateRunManifest(manifest, { status: "running" });
 
+  // Class A: the first signal aborts and notifies; it never calls
+  // process.exit, so the loop unwinds on its own and every durable write in
+  // flight completes. The second one exits hard with 130.
+  const interrupt = createInterruptScope();
+  interrupt.onInterrupt((received) => {
+    log.warn(`\n${received} recibido: terminando la ola en curso y guardando el estado (otro ${received} corta en seco).`);
+  });
+
   try {
-  if (opts.parallel) {
+  if (runsParallel) {
     // Workers read the model from env; an explicit -m must win over config.
     if (opts.model) process.env.CLI_MODEL = opts.model;
 
-    log.title(`Run (parallel) · ${process.env.SLAD_CLI_BINARY ?? "cli"} · max ${opts.maxParallel ?? 3}`);
+    log.title(`Run (parallel) · ${process.env.SLAD_CLI_BINARY ?? "cli"} · max ${maxParallel}`);
+    if (resumeContext) {
+      log.dim(
+        `  resume de ${resumeContext.parent.value.runId}: ${resumeContext.skipSet.length} tarea(s) ya completada(s), ` +
+        `${resumeContext.taskDispatches}/${maxTasks} dispatches consumidos`,
+      );
+    }
     let currentSession = session;
     const parallelResult = await runParallel({
       plan: parsedPlan,
       sessionId: session.id,
+      runId,
       cwd,
-      maxParallel: opts.maxParallel ?? 3,
-      maxTasks: opts.maxTasks ?? 10,
-      strictOwnership: opts.strictOwnership ?? false,
-      useWorktrees: opts.worktrees ?? false,
-      keepWorktrees: opts.keepWorktrees ?? false,
+      maxParallel,
+      maxTasks,
+      strictOwnership,
+      useWorktrees,
+      keepWorktrees,
       fromIntegration,
+      alreadyDone: resumeContext?.skipSet,
+      taskDispatches: resumeContext?.taskDispatches ?? 0,
+      recycleTaskWorktrees: fromIntegration
+        ? (resumeContext?.parent ?? parentReview)?.value.tasks.map((task) => task.taskId)
+        : undefined,
+      signal: interrupt.signal,
       projectMemory: readProjectMemory(cwd),
+      // A3 — one durable reservation per dispatch, right before the spawn.
+      onDispatchReserve: async (taskId, { worktree }) => {
+        await reserveTaskDispatch(manifest, { taskId, worktree });
+      },
+      // A1 — the checkpoint: exactly one manifest write, nothing else.
+      onTaskIntegrated: async (taskId, checkpoint) => {
+        await checkpointTaskIntegration(manifest, { taskId, ...checkpoint });
+      },
+      // Secondary work: never fails the task. Completion is defined by the
+      // merge, not by the evidence file (I9).
       onTaskOutput: async (output) => {
-        const ref = await writeArtifact("run", output, { sessionId: currentSession?.id ?? "adhoc" });
-        const sha256 = await sha256File(ref.path);
-        await updateRunManifest(manifest, (current) => ({
-          ...current,
-          tasks: current.tasks.map((task) => task.taskId === output.taskId
-            ? { ...task, status: output.status === "awaiting_human" ? "blocked" : output.status, artifact: ref.path }
-            : task),
-          artifacts: [...current.artifacts, { kind: "run", path: ref.path, sha256 }],
-        }));
-        if (currentSession) {
-          currentSession = appendArtifact(currentSession, "run", ref.path);
-          saveSession(currentSession);
+        try {
+          const ref = await writeArtifact("run", output, { sessionId: currentSession?.id ?? "adhoc" });
+          const sha256 = await sha256File(ref.path);
+          await updateRunManifest(manifest, (current) => ({
+            ...current,
+            tasks: current.tasks.map((task) => task.taskId === output.taskId
+              ? { ...task, artifact: ref.path }
+              : task),
+            artifacts: [...current.artifacts, { kind: "run", path: ref.path, sha256 }],
+          }));
+          if (currentSession) {
+            currentSession = appendArtifact(currentSession, "run", ref.path);
+            saveSession(currentSession);
+          }
+        } catch (error) {
+          const reason = (error instanceof Error ? error.message : String(error)).slice(0, 400);
+          log.warn(`No se pudo escribir el artefacto de ${output.taskId}: ${reason}`);
+          await updateRunManifest(manifest, (current) => ({
+            ...current,
+            tasks: current.tasks.map((task) => task.taskId === output.taskId
+              ? { ...task, artifactError: reason }
+              : task),
+          })).catch(() => undefined);
         }
         const task = taskById.get(output.taskId);
         if (task) {
@@ -403,6 +960,43 @@ export async function runCommand(opts: RunOpts): Promise<void> {
       },
     });
 
+    // Class A terminalization, in order: durable manifest write, then the
+    // lock, then the hook. Durable state may not depend on an external
+    // process, and a hung hook may not hold the session.
+    if (parallelResult.interrupted) {
+      if (parallelResult.integration) {
+        await recordIntegration(manifest, {
+          ...parallelResult.integration,
+          ...(parentRunId ? { fromRun: parentRunId } : {}),
+        });
+      }
+      await markRunInterrupted(manifest, {
+        signal: interrupt.interruptedBy() ?? "SIGINT",
+        hasIntegration: Boolean(parallelResult.integration),
+      });
+      await killSessionTmuxWindows(session.id);
+      releaseLock();
+      await runPostLifecycleHooks(hooks, "post-run", {
+        event: "post-run",
+        command: "run",
+        cwd,
+        runId,
+        sessionId: session.id,
+        status: "interrupted",
+      });
+      if (parallelResult.integration) {
+        log.info(`Run ${runId} interrumpido; el trabajo integrado sigue en ${parallelResult.integration.branch}.`);
+        log.dim(`  slad pipeline run --review ${runId}   ver qué quedó`);
+        log.dim(`  slad pipeline run --resume ${runId}   continuar donde se cortó`);
+        log.dim(`  slad pipeline run --apply ${runId}    aplicar lo integrado`);
+        log.dim(`  slad pipeline run --abort ${runId}    descartar la integración`);
+      } else {
+        log.info(`Run ${runId} cancelado antes de integrar nada; la sesión quedó limpia.`);
+      }
+      process.exitCode = INTERRUPT_EXIT_CODE;
+      return;
+    }
+
     if (opts.json) {
       console.log(JSON.stringify(parallelResult.outputs, null, 2));
     } else {
@@ -414,7 +1008,6 @@ export async function runCommand(opts: RunOpts): Promise<void> {
     if (parallelResult.integration) {
       // Review before apply: the merged result stays on the integration
       // branch; the main worktree receives nothing until --apply.
-      const runId = manifest.value.runId;
       await updateRunManifest(manifest, (current) => ({
         ...current,
         status: "review_pending",
@@ -422,7 +1015,7 @@ export async function runCommand(opts: RunOpts): Promise<void> {
           ...current.worktrees,
           integration: {
             ...parallelResult.integration!,
-            ...(parentReview ? { fromRun: parentReview.value.runId } : {}),
+            ...(parentRunId ? { fromRun: parentRunId } : {}),
           },
         },
       }));
@@ -435,10 +1028,12 @@ export async function runCommand(opts: RunOpts): Promise<void> {
     } else {
       await completeRunManifest(manifest, parallelResult.status);
     }
+    releaseLock();
     await runPostLifecycleHooks(hooks, "post-run", {
       event: "post-run",
       command: "run",
       cwd,
+      runId,
       sessionId: session.id,
       status: parallelResult.status,
     });
@@ -489,9 +1084,10 @@ export async function runCommand(opts: RunOpts): Promise<void> {
     provider,
     model,
     stages: ["run"],
-    maxTasks: opts.maxTasks ?? 10,
+    maxTasks,
     hitl,
     harness,
+    signal: interrupt.signal,
     prompts: {
       explorer: prompts.EXPLORER_SYSTEM,
       snapshot: prompts.SNAPSHOT_SYSTEM,
@@ -578,6 +1174,26 @@ export async function runCommand(opts: RunOpts): Promise<void> {
     spinner.succeed("Ejecución completada");
   }
 
+  if (interrupt.interrupted()) {
+    // No worktrees on this path, so there is no integration to review: the
+    // run is simply cancelled with its state recorded exactly.
+    await markRunInterrupted(manifest, {
+      signal: interrupt.interruptedBy() ?? "SIGINT",
+      hasIntegration: false,
+    });
+    releaseLock();
+    await runPostLifecycleHooks(hooks, "post-run", {
+      event: "post-run",
+      command: "run",
+      cwd,
+      runId,
+      sessionId: session.id,
+      status: "interrupted",
+    });
+    process.exitCode = INTERRUPT_EXIT_CODE;
+    return;
+  }
+
   await completeRunManifest(
     manifest,
     result.status === "completed"
@@ -585,10 +1201,12 @@ export async function runCommand(opts: RunOpts): Promise<void> {
       : "failed",
     result.status === "failed" ? result.errors.join("; ") : undefined,
   );
+  releaseLock();
   await runPostLifecycleHooks(hooks, "post-run", {
     event: "post-run",
     command: "run",
     cwd,
+    runId,
     sessionId: session.id,
     status: result.status,
   });
@@ -600,18 +1218,41 @@ export async function runCommand(opts: RunOpts): Promise<void> {
     console.log(kleur.bold("Run ") + color(result.status));
   }
   } catch (error) {
+    // A1.3/A3.2 — a durable write the run depends on failed. The manifest no
+    // longer describes the branch, so the run is class B: diagnosed, never
+    // marked resumable, and nothing of its work is deleted.
+    if (error instanceof DurableWriteError) {
+      await markRunUnrecoverable(manifest, error.message).catch(() => undefined);
+      log.error(error.message);
+      await printUnrecoverableDiagnosis(manifest, cwd);
+      releaseLock();
+      await runPostLifecycleHooks(hooks, "post-run", {
+        event: "post-run",
+        command: "run",
+        cwd,
+        runId,
+        sessionId: session.id,
+        status: "interrupted",
+      });
+      process.exitCode = 1;
+      return;
+    }
     await completeRunManifest(
       manifest,
       "failed",
       error instanceof Error ? error.message : String(error),
     );
+    releaseLock();
     await runPostLifecycleHooks(hooks, "post-run", {
       event: "post-run",
       command: "run",
       cwd,
+      runId,
       sessionId: session.id,
       status: "failed",
     });
     throw error;
+  } finally {
+    interrupt.dispose();
   }
 }

@@ -210,6 +210,10 @@ pipelineCmd
   .option("--apply <runId>", "Aplicar la integración de un run review_pending como cambios staged en el worktree principal")
   .option("--abort <runId>", "Descartar la integración de un run review_pending: limpia ramas y worktrees sin tocar main")
   .option("--from-review <runId>", "Ejecutar el plan activo como follow-up desde el tip de integración de un run review_pending (requiere --parallel --worktrees)")
+  .option("--resume <runId>", "Reanudar un run interrumpido por Ctrl-C/SIGTERM: saltea las tareas ya completadas y continúa desde el tip de integración")
+  .option("--no-strict-ownership", "Reanudar con el gate de ownership apagado cuando el run padre no registró su política")
+  .option("--force-unlock <runId>", "Tomar el lock de la sesión copiando el runId del tenedor que aparece en el error (solo si verificaste que ese proceso murió)")
+  .option("--assume-workers-dead", "Borrar los sentinels de workers sin enviar ninguna señal (los verificaste y los mataste vos)")
   .option("--bypass", "Ejecutar aunque el plan activo no esté aprobado (queda bajo tu responsabilidad)")
   .option("--json", "Imprimir JSON plano en stdout en lugar del resumen legible")
   .option("--skip-session", "Ignorar sesión activa (comportamiento v0.1.0)")
@@ -217,8 +221,17 @@ pipelineCmd
   .option("--non-interactive", "No abrir prompts interactivos; persistir/saltar bloqueos para UI/automation")
   .option("--tools", "Habilitar tool use: el agente ejecuta código real (default si el provider lo soporta)")
   .option("--no-tools", "Deshabilitar tool use: modo advisory (describe qué haría sin ejecutar)")
-  .action(async (taskArg: string | undefined, opts) => {
-    await runCommand({ ...opts, task: taskArg ?? opts.task });
+  .action(async (taskArg: string | undefined, opts, command) => {
+    // --strict-ownership / --no-strict-ownership must stay tri-state: a resume
+    // needs "absent" distinguishable from "off", and commander's negation
+    // would otherwise flip the default to on.
+    const ownershipFromCli = command.getOptionValueSource("strictOwnership") === "cli";
+    await runCommand({
+      ...opts,
+      strictOwnership: ownershipFromCli && opts.strictOwnership === true ? true : undefined,
+      noStrictOwnership: ownershipFromCli && opts.strictOwnership === false ? true : undefined,
+      task: taskArg ?? opts.task,
+    });
   });
 
 pipelineCmd

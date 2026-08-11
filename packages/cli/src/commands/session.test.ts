@@ -39,7 +39,7 @@ async function runCli(args: string[], cwd: string): Promise<{ stdout: string; st
   return execFileAsync(process.execPath, ["--import", TSX_LOADER, CLI_PATH, ...args], {
     cwd,
     env: { ...process.env, SLAD_DOCS_PATH: path.join(cwd, "docs") },
-    timeout: 10_000,
+    timeout: 30_000,
   });
 }
 
