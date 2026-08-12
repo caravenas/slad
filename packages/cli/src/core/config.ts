@@ -181,6 +181,11 @@ function applyAgentEnv(agent: import("@slad/shared").AgentName, fallbackBinary?:
   }
 }
 
+export function applyRecordedBackendEnv(agent: AgentName, model: string | undefined, binary?: string): void {
+  const configuredBinary = binary ?? settingsValue<string>(["providers", "binaries", agent]);
+  Object.assign(process.env, backendEnvPatch(CliBackendId.parse(agent), model, configuredBinary));
+}
+
 export function parseCliDiscoveryAnswer(answer: string | undefined): string | null {
   if (!answer) return null;
   const value = answer.trim();

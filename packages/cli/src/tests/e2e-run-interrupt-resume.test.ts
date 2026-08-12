@@ -57,6 +57,11 @@ const EXTERNAL_PLAN = {
  */
 const FAKE_AGENT = `#!/bin/sh
 PROMPT=$(cat)
+if [ -z "$PROMPT" ]; then
+  for ARG in "$@"; do
+    PROMPT="$ARG"
+  done
+fi
 TASK=$(printf '%s' "$PROMPT" | sed -n 's/.*"taskId": "\\(T[0-9]*\\)".*/\\1/p' | tail -1)
 case "$TASK" in
   T1) FILE=a.txt ;;
@@ -64,6 +69,18 @@ case "$TASK" in
   T3) FILE=c.txt ;;
   *) echo "unknown task: $TASK" >&2; exit 1 ;;
 esac
+MODEL=""
+PREV=""
+for ARG in "$@"; do
+  if [ "$PREV" = "--model" ]; then
+    MODEL="$ARG"
+    break
+  fi
+  PREV="$ARG"
+done
+if [ -n "$SLAD_FIXTURE_INVOCATIONS" ]; then
+  printf '%s|%s|%s\\n' "$0" "$TASK" "$MODEL" >> "$SLAD_FIXTURE_INVOCATIONS"
+fi
 if [ -n "$SLAD_FIXTURE_SLOW" ] && [ "$TASK" != "T1" ]; then
   sleep 120
 fi
@@ -147,6 +164,15 @@ function waitForExit(child: ChildProcess): Promise<{ code: number | null; signal
   });
 }
 
+function configureReplayableClaude(cwd: string): void {
+  fs.mkdirSync(path.join(cwd, ".slad-os"), { recursive: true });
+  fs.writeFileSync(
+    path.join(cwd, ".slad-os", "config.json"),
+    JSON.stringify({ providers: { binaries: { claude: path.join(cwd, "fake-agent.sh") } } }, null, 2) + "\n",
+    "utf8",
+  );
+}
+
 async function withFixture(fn: (cwd: string, sessionId: string, baseRef: string) => Promise<void>): Promise<void> {
   const cwd = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "slad-e2e-sigint-")));
   const originalCwd = process.cwd();
@@ -160,12 +186,13 @@ async function withFixture(fn: (cwd: string, sessionId: string, baseRef: string)
 
     git(cwd, "init", "-q");
     fs.writeFileSync(path.join(cwd, "AGENTS.md"), "# Fixture\n");
-    fs.writeFileSync(path.join(cwd, ".gitignore"), ".slad-os/\ndocs/\nplan.json\nfake-agent.sh\n");
+    fs.writeFileSync(path.join(cwd, ".gitignore"), ".slad-os/\ndocs/\nplan.json\nfake-agent.sh\nfake-agent-wrong.sh\n");
     git(cwd, "add", "-A");
     git(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init");
     const baseRef = git(cwd, "rev-parse", "HEAD");
 
     fs.writeFileSync(path.join(cwd, "fake-agent.sh"), FAKE_AGENT, { mode: 0o755 });
+    fs.writeFileSync(path.join(cwd, "fake-agent-wrong.sh"), FAKE_AGENT, { mode: 0o755 });
     const session = createSession(INTENT);
     fs.writeFileSync(path.join(cwd, "plan.json"), JSON.stringify(EXTERNAL_PLAN), "utf8");
     await planCommand({ import: path.join(cwd, "plan.json") });
@@ -188,9 +215,15 @@ describe("E2E: SIGINT real durante run --parallel --worktrees, y --resume", { co
     await withFixture(async (cwd, sessionId, baseRef) => {
       const branch = `slad/${sessionId}/integration`;
       const lockPath = path.join(cwd, ".slad-os", "sessions", sessionId, "run.lock");
+      configureReplayableClaude(cwd);
 
       // ── 1. Run that will be interrupted during wave 2 ──────────────────
-      const first = spawnChild(cwd, { SLAD_FIXTURE_SLOW: "1" });
+      const first = spawnChild(cwd, {
+        SLAD_FIXTURE_SLOW: "1",
+        SLAD_DEFAULT_PROVIDER: "cli",
+        SLAD_DEFAULT_AGENT: "claude",
+        CLI_MODEL: "sonnet-fixture",
+      });
       const firstExit = waitForExit(first);
 
       const parentRunId = await until("el manifest del run padre", () => latestRunId(cwd));
@@ -290,12 +323,76 @@ describe("E2E: SIGINT real durante run --parallel --worktrees, y --resume", { co
     });
   });
 
+  it("reanuda con el binary/model del padre aunque el ambiente del resume apunte a otro backend", async () => {
+    await withFixture(async (cwd, sessionId, baseRef) => {
+      const branch = `slad/${sessionId}/integration`;
+      const rightBinary = path.join(cwd, "fake-agent.sh");
+      const wrongBinary = path.join(cwd, "fake-agent-wrong.sh");
+      configureReplayableClaude(cwd);
+
+      const first = spawnChild(cwd, {
+        SLAD_FIXTURE_SLOW: "1",
+        SLAD_DEFAULT_PROVIDER: "cli",
+        SLAD_DEFAULT_AGENT: "claude",
+        CLI_MODEL: "sonnet-fixture",
+      });
+      const firstExit = waitForExit(first);
+
+      const parentRunId = await until("el manifest del run padre", () => latestRunId(cwd));
+      await until("el merge de la ola 1", () => {
+        const manifest = readManifest(cwd, parentRunId);
+        return manifest?.worktrees?.integration?.tip !== undefined &&
+          manifest.worktrees.integration.tip !== baseRef;
+      });
+      first.kill("SIGINT");
+      assert.equal((await firstExit).code, 130);
+
+      const parent = readManifest(cwd, parentRunId)!;
+      assert.deepEqual(parent.backend, { provider: "cli", agent: "claude", model: "sonnet-fixture" });
+
+      const known = new Set(fs.readdirSync(path.join(cwd, ".slad-os", "runs")));
+      const invocationLog = path.join(cwd, "resume-invocations.log");
+      const resume = spawnChild(cwd, {
+        SLAD_FIXTURE_RESUME: parentRunId,
+        SLAD_FIXTURE_INVOCATIONS: invocationLog,
+        SLAD_CLI_BINARY: wrongBinary,
+        SLAD_DEFAULT_PROVIDER: "cli",
+        SLAD_DEFAULT_AGENT: "codex",
+        CLI_MODEL: "wrong-model",
+      });
+      const resumeResult = await waitForExit(resume);
+      assert.equal(resumeResult.code, 0, `el resume debe ignorar el backend ambiente\n${resumeResult.output}`);
+
+      const childRunId = latestRunId(cwd, known)!;
+      const child = readManifest(cwd, childRunId)!;
+      assert.deepEqual(child.backend, parent.backend);
+      assert.equal(child.status, "review_pending");
+      assert.ok(child.tasks.every((task: any) => task.status === "completed"));
+
+      const invocations = fs.readFileSync(invocationLog, "utf8").trim().split("\n").filter(Boolean);
+      assert.ok(invocations.length >= 2, `faltan invocaciones del resume:\n${invocations.join("\n")}`);
+      assert.ok(invocations.every((line) => line.startsWith(`${rightBinary}|`)), invocations.join("\n"));
+      assert.ok(invocations.every((line) => line.endsWith("|sonnet-fixture")), invocations.join("\n"));
+      assert.ok(invocations.every((line) => !line.includes("fake-agent-wrong.sh")), invocations.join("\n"));
+
+      const aCommits = git(cwd, "log", "--oneline", "--follow", `${baseRef}..${branch}`, "--", "a.txt")
+        .split("\n").filter(Boolean);
+      assert.equal(aCommits.length, 1, `a.txt se mergeó exactamente una vez:\n${aCommits.join("\n")}`);
+    });
+  });
+
   it("de dos --resume concurrentes procede exactamente uno", async () => {
     await withFixture(async (cwd, sessionId, baseRef) => {
       const branch = `slad/${sessionId}/integration`;
+      configureReplayableClaude(cwd);
 
       // Interrupt a run to get a resumable parent.
-      const first = spawnChild(cwd, { SLAD_FIXTURE_SLOW: "1" });
+      const first = spawnChild(cwd, {
+        SLAD_FIXTURE_SLOW: "1",
+        SLAD_DEFAULT_PROVIDER: "cli",
+        SLAD_DEFAULT_AGENT: "claude",
+        CLI_MODEL: "sonnet-fixture",
+      });
       const firstExit = waitForExit(first);
       const parentRunId = await until("el manifest del run padre", () => latestRunId(cwd));
       await until("el merge de la ola 1", () => {

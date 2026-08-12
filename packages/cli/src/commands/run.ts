@@ -6,7 +6,8 @@ import { promisify } from "node:util";
 import ora from "ora";
 import kleur from "kleur";
 import { runSladPipeline } from "@slad/pipeline";
-import { getModel, loadConfig, resolveProvider } from "../core/config.js";
+import { applyRecordedBackendEnv, getModel, loadConfig, resolveProvider, settingsValue } from "../core/config.js";
+import { resolveBackendBinary } from "../core/backend-registry.js";
 import { getSladProvider } from "../core/providers.js";
 import { log } from "../core/logger.js";
 import { writeArtifact, type ReadPlanResult } from "../persistence/index.js";
@@ -16,7 +17,7 @@ import { createHarness } from "@slad/harness";
 import { loadHarnessConfig } from "@slad/harness";
 import * as prompts from "../agents/prompts.js";
 import { getActiveSession, appendArtifact, readSessionPlan, saveSession } from "../core/session.js";
-import { PlanOutput, type PlanArtifactEnvelope, type RunOutput } from "../core/types.js";
+import { AgentName, PlanOutput, ProviderName, type PlanArtifactEnvelope, type RunOutput } from "../core/types.js";
 import { ProviderError } from "../core/errors.js";
 import { DurableWriteError, runParallel } from "./run-parallel.js";
 import {
@@ -382,6 +383,7 @@ export async function abortRunAction(
 interface ResumeContext {
   parent: RunManifestHandle;
   integration: NonNullable<RunManifestHandle["value"]["worktrees"]["integration"]>;
+  backend: RunManifestHandle["value"]["backend"];
   /** Parent tasks already `completed`: the skip set (I2), valid by I0. */
   skipSet: string[];
   /** Parent task entries copied into the child so --review shows the chain. */
@@ -450,6 +452,45 @@ async function resolveResume(
     log.error(
       `El plan activo cambió desde el run ${runId} (hash ${planEnvelope.approval.planHash.slice(0, 12)} ≠ ` +
       `${value.plan.hash.slice(0, 12)}); reanudar ejecutaría otro plan.`,
+    );
+    return null;
+  }
+
+  const resolvedProvider = ProviderName.safeParse(value.backend.provider);
+  if (!resolvedProvider.success) {
+    log.error(
+      `El run ${runId} registró provider "${value.backend.provider}" no soportado; no se puede reanudar con seguridad.`,
+    );
+    return null;
+  }
+  if (!value.backend.agent || !value.backend.model) {
+    log.error(
+      `El run ${runId} no registró agent/model (manifest anterior a este cambio); ` +
+      "no se puede reanudar sin saber qué backend replicar.",
+    );
+    return null;
+  }
+  const resolvedAgent = AgentName.safeParse(value.backend.agent);
+  if (!resolvedAgent.success) {
+    log.error(
+      `El run ${runId} registró agent "${value.backend.agent}" no soportado; no se puede reanudar con seguridad.`,
+    );
+    return null;
+  }
+  try {
+    const configuredBinary = settingsValue<string>(["providers", "binaries", resolvedAgent.data]);
+    const binary = resolveBackendBinary(resolvedAgent.data, configuredBinary);
+    if (binary.status !== "resolved" || !binary.resolvedPath) {
+      log.error(
+        `El run ${runId} no puede reanudar con agent ${resolvedAgent.data}: ` +
+        `${binary.reason ?? "no hay binario ejecutable disponible."}`,
+      );
+      return null;
+    }
+  } catch (error) {
+    log.error(
+      `El run ${runId} no puede reanudar con agent ${resolvedAgent.data}: ` +
+      `${error instanceof Error ? error.message : String(error)}`,
     );
     return null;
   }
@@ -562,6 +603,11 @@ async function resolveResume(
   return {
     parent,
     integration,
+    backend: {
+      provider: resolvedProvider.data,
+      agent: resolvedAgent.data,
+      model: value.backend.model,
+    },
     skipSet,
     // Only the completed entries carry over: failure is never inherited (I6),
     // and a `skipped` that was mere cascade of a killed worker goes back to
@@ -607,6 +653,7 @@ export async function runCommand(opts: RunOpts): Promise<void> {
       ["--parallel", opts.parallel], ["--worktrees", opts.worktrees], ["--keep-worktrees", opts.keepWorktrees],
       ["--from-review", opts.fromReview], ["--review", opts.review], ["--apply", opts.apply],
       ["--abort", opts.abort], ["--task", opts.task], ["--auto", opts.auto], ["--bypass", opts.bypass],
+      ["--agent", opts.agent], ["--provider", opts.provider], ["--model", opts.model],
     ].filter(([, value]) => Boolean(value)).map(([flag]) => flag as string);
     if (conflicting.length > 0) {
       log.error(`--resume no se combina con ${conflicting.join(", ")}: reanuda el run tal como fue configurado.`);
@@ -719,9 +766,6 @@ async function runCommandLocked(opts: RunOpts, ctx: LockedRunContext): Promise<v
     return;
   }
 
-  const config = loadConfig();
-  const providerName = resolveProvider(opts.provider, opts.agent, config.defaultProvider, config.defaultAgent);
-  const selectedModel = opts.model ?? getModel(providerName);
   const parsedPlan = PlanOutput.parse(planInput);
   const taskById = new Map(parsedPlan.tasks.map((task) => [task.id, task]));
   const hooks = loadLifecycleHooks(cwd);
@@ -735,6 +779,16 @@ async function runCommandLocked(opts: RunOpts, ctx: LockedRunContext): Promise<v
       process.exitCode = 1;
       return;
     }
+  }
+
+  const config = loadConfig();
+  const providerName = resumeContext
+    ? ProviderName.parse(resumeContext.backend.provider)
+    : resolveProvider(opts.provider, opts.agent, config.defaultProvider, config.defaultAgent);
+  const agentName = resumeContext ? resumeContext.backend.agent : opts.agent ?? config.defaultAgent;
+  const selectedModel = resumeContext ? resumeContext.backend.model ?? "" : opts.model ?? getModel(providerName);
+  if (resumeContext && agentName) {
+    applyRecordedBackendEnv(AgentName.parse(agentName), selectedModel);
   }
 
   // --from-review: the follow-up plan runs on top of the parent run's not-yet-
@@ -838,7 +892,7 @@ async function runCommandLocked(opts: RunOpts, ctx: LockedRunContext): Promise<v
     } : undefined,
     backend: {
       provider: providerName,
-      agent: opts.agent ?? config.defaultAgent,
+      agent: agentName,
       model: selectedModel,
     },
     stages: [{ id: "run", status: "pending" }],

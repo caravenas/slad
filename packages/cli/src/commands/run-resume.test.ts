@@ -46,6 +46,19 @@ function branchExists(cwd: string, branch: string): boolean {
   }).trim().length > 0;
 }
 
+function latestRunId(cwd: string, exclude: Set<string> = new Set()): string | null {
+  const runsDir = path.join(cwd, ".slad-os", "runs");
+  try {
+    const ids = fs.readdirSync(runsDir).filter((id) => !exclude.has(id));
+    if (ids.length === 0) return null;
+    return ids
+      .map((id) => ({ id, manifest: JSON.parse(fs.readFileSync(path.join(runsDir, id, "manifest.json"), "utf8")) as { startedAt?: string } }))
+      .sort((a, b) => String(b.manifest.startedAt).localeCompare(String(a.manifest.startedAt)))[0]?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 interface Fixture {
   cwd: string;
   sessionId: string;
@@ -74,6 +87,12 @@ async function withFixture(fn: (fixture: Fixture) => Promise<void>): Promise<voi
     const baseRef = git(cwd, "rev-parse", "HEAD");
 
     const session = createSession(INTENT);
+    fs.mkdirSync(path.join(cwd, ".slad-os"), { recursive: true });
+    fs.writeFileSync(
+      path.join(cwd, ".slad-os", "config.json"),
+      JSON.stringify({ providers: { binaries: { claude: "/bin/echo" } } }, null, 2) + "\n",
+      "utf8",
+    );
     fs.writeFileSync(path.join(cwd, "plan.json"), JSON.stringify(EXTERNAL_PLAN), "utf8");
     await planCommand({ import: path.join(cwd, "plan.json") });
     await planCommand({ approve: true });
@@ -110,6 +129,7 @@ async function interruptedParent(
     planHash?: string;
     approval?: "approved" | "pending";
     status?: "interrupted" | "review_pending";
+    backend?: { provider: string; agent?: string; model?: string };
   } = {},
 ) {
   const { cwd, baseRef } = fixture;
@@ -134,7 +154,7 @@ async function interruptedParent(
       hash: overrides.planHash ?? fixture.planHash,
       approval: overrides.approval ?? "approved",
     },
-    backend: { provider: "cli" },
+    backend: overrides.backend ?? { provider: "cli", agent: "claude", model: "sonnet" },
     tasks: [{ taskId: "T1", status: "completed" }, { taskId: "T2", status: "interrupted" }],
     limits: { maxTasks: overrides.maxTasks ?? 10, maxParallel: 3 },
     worktrees: { enabled: true, keep: false, integration: { branch, baseRef, tip } },
@@ -184,6 +204,95 @@ describe("--resume — guards de §7.1", () => {
       await runCommand({ resume: parent.runId });
       assert.equal(process.exitCode, 1);
       assert.equal(git(fixture.cwd, "rev-parse", parent.branch), parent.tip);
+    });
+  });
+
+  it("repite el backend exacto del padre aunque el ambiente cambie", async () => {
+    await withFixture(async (fixture) => {
+      const parent = await interruptedParent(fixture, {
+        backend: { provider: "cli", agent: "claude", model: "sonnet" },
+      });
+      const known = new Set([parent.runId]);
+      const previousEnv = {
+        CLI_MODEL: process.env.CLI_MODEL,
+        SLAD_CLI_BINARY: process.env.SLAD_CLI_BINARY,
+        SLAD_CLI_ARGS: process.env.SLAD_CLI_ARGS,
+        SLAD_CLI_PROMPT_MODE: process.env.SLAD_CLI_PROMPT_MODE,
+        SLAD_CLI_MODEL_ARG: process.env.SLAD_CLI_MODEL_ARG,
+        SLAD_DEFAULT_PROVIDER: process.env.SLAD_DEFAULT_PROVIDER,
+        SLAD_DEFAULT_AGENT: process.env.SLAD_DEFAULT_AGENT,
+      };
+      process.env.CLI_MODEL = "fable";
+      process.env.SLAD_CLI_BINARY = "/bin/cat";
+      process.env.SLAD_CLI_ARGS = "";
+      process.env.SLAD_CLI_PROMPT_MODE = "stdin";
+      process.env.SLAD_CLI_MODEL_ARG = "--model";
+      process.env.SLAD_DEFAULT_PROVIDER = "cli";
+      process.env.SLAD_DEFAULT_AGENT = "codex";
+      let replayedModel: string | undefined;
+      let replayedBinary: string | undefined;
+      try {
+        await runCommand({ resume: parent.runId });
+      } catch {
+        // Worker execution is not under test here; manifest/env replay is.
+      } finally {
+        replayedModel = process.env.CLI_MODEL;
+        replayedBinary = process.env.SLAD_CLI_BINARY;
+        for (const [key, value] of Object.entries(previousEnv)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      }
+
+      const childRunId = latestRunId(fixture.cwd, known);
+      assert.ok(childRunId, "el resume debe crear su manifest hijo antes de ejecutar workers");
+      const childManifest = await readRunManifest(path.join(fixture.cwd, ".slad-os", "runs", childRunId!, "manifest.json"));
+      assert.deepEqual(childManifest.value.backend, { provider: "cli", agent: "claude", model: "sonnet" });
+      assert.equal(replayedModel, "sonnet");
+      assert.equal(replayedBinary, "/bin/echo");
+    });
+  });
+
+  it("un padre sin agent/model registrado no es reanudable", async () => {
+    await withFixture(async (fixture) => {
+      const parent = await interruptedParent(fixture, { backend: { provider: "cli" } });
+      const lines: string[] = [];
+      const original = console.error;
+      console.error = (...args: unknown[]) => { lines.push(args.join(" ")); };
+      try {
+        await runCommand({ resume: parent.runId });
+      } finally {
+        console.error = original;
+      }
+      assert.equal(process.exitCode, 1);
+      assert.ok(lines.join("\n").includes("no registró agent/model"));
+      assert.equal(git(fixture.cwd, "rev-parse", parent.branch), parent.tip);
+      assert.equal((await readRunManifest(parent.manifestPath)).value.status, "interrupted");
+    });
+  });
+
+  it("un agent registrado sin binario resolvible rechaza sin tocar nada", async () => {
+    await withFixture(async (fixture) => {
+      const parent = await interruptedParent(fixture, {
+        backend: { provider: "cli", agent: "claude", model: "sonnet" },
+      });
+      fs.writeFileSync(
+        path.join(fixture.cwd, ".slad-os", "config.json"),
+        JSON.stringify({ providers: { binaries: { claude: "/missing/claude" } } }, null, 2) + "\n",
+        "utf8",
+      );
+      const lines: string[] = [];
+      const original = console.error;
+      console.error = (...args: unknown[]) => { lines.push(args.join(" ")); };
+      try {
+        await runCommand({ resume: parent.runId });
+      } finally {
+        console.error = original;
+      }
+      assert.equal(process.exitCode, 1);
+      assert.ok(lines.join("\n").includes("agent claude"));
+      assert.equal(git(fixture.cwd, "rev-parse", parent.branch), parent.tip);
+      assert.equal((await readRunManifest(parent.manifestPath)).value.status, "interrupted");
     });
   });
 
@@ -330,6 +439,15 @@ describe("--resume — guards de §7.1", () => {
       assert.equal(process.exitCode, 1);
       process.exitCode = undefined;
       await runCommand({ resume: parent.runId, parallel: true });
+      assert.equal(process.exitCode, 1);
+      process.exitCode = undefined;
+      await runCommand({ resume: parent.runId, model: "fable" });
+      assert.equal(process.exitCode, 1);
+      process.exitCode = undefined;
+      await runCommand({ resume: parent.runId, agent: "claude" });
+      assert.equal(process.exitCode, 1);
+      process.exitCode = undefined;
+      await runCommand({ resume: parent.runId, provider: "cli" });
       assert.equal(process.exitCode, 1);
     });
   });
